@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from tantan.backend.utils import get_logger; print\\('OK'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '..'\\); from tantan.backend.utils.logger import get_logger; print\\('OK'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from tantan.backend.utils import get_logger; print\\('OK'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); print\\(sys.path[:5]\\); import tantan; print\\(tantan\\)\")",
+      "Bash(dir)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); import os; print\\(os.path.exists\\('__init__.py'\\), os.path.exists\\('tantan'\\)\\); from tantan.backend.utils import get_logger; print\\('OK'\\)\")",
+      "Bash(set PYTHONPATH=..)",
+      "Bash(python -c \"from tantan.backend.utils import get_logger; print\\('OK'\\)\")",
+      "Bash(python -c \"import sys; print\\('\\\\\\\\n'.join\\(sys.path[:5]\\)\\); print\\('---'\\); import os; os.chdir\\('..'\\); print\\(os.getcwd\\(\\), os.listdir\\('.'\\)\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); print\\('path[0]:', sys.path[0]\\); import tantan.backend.utils.logger\")",
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "Bash(xxd)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

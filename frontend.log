@@ -1,0 +1,23 @@
+
+> tantan-frontend@0.1.0 dev
+> next dev
+
+   ▲ Next.js 14.1.0
+   - Local:        http://localhost:3000
+
+ ✓ Ready in 2.8s
+ ○ Compiling /not-found ...
+ ✓ Compiled /not-found in 13.4s (3503 modules)
+(node:20616) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ○ Compiling / ...
+ ✓ Compiled / in 1050ms (3494 modules)
+Warning: [antd: Spin] `tip` is deprecated. Please use `description` instead.
+ ✓ Compiled in 739ms (1710 modules)
+ ✓ Compiled in 1895ms (1710 modules)
+ ○ Compiling /login ...
+ ✓ Compiled /dashboard in 39.1s (6633 modules)
+ ○ Compiling /not-found ...
+ ✓ Compiled /not-found in 14.5s (6638 modules)
+ ✓ Compiled in 15.1s (6633 modules)
+[?25h
