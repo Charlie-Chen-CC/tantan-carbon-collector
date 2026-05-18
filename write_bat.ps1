@@ -1,0 +1,85 @@
+$content = @"
+@echo off
+chcp 65001 > nul
+
+setlocal enabledelayedexpansion
+
+echo ========================================
+echo   Tantan System Launcher
+echo ========================================
+echo.
+
+set "BACKEND_PORT=8000"
+set "BACKEND_MAX_PORT=8010"
+set "FRONTEND_PORT=3000"
+set "FRONTEND_MAX_PORT=3010"
+
+set "PROJECT_ROOT=%~dp0"
+set "PROJECT_ROOT=%PROJECT_ROOT:~0,-1%"
+
+:CHECK_BACKEND
+netstat -ano 2>nul | findstr /r "^.*:%BACKEND_PORT%.*LISTENING" > nul
+if !errorlevel! equ 0 (
+    if %BACKEND_PORT% lss %BACKEND_MAX_PORT% (
+        echo [Backend] Port %BACKEND_PORT% in use, trying next...
+        set /a BACKEND_PORT+=1
+        goto CHECK_BACKEND
+    ) else (
+        echo [ERROR] All backend ports (8000-8010) are in use
+        exit /b 1
+    )
+)
+
+:CHECK_FRONTEND
+netstat -ano 2>nul | findstr /r "^.*:%FRONTEND_PORT%.*LISTENING" > nul
+if !errorlevel! equ 0 (
+    if %FRONTEND_PORT% lss %FRONTEND_MAX_PORT% (
+        echo [Frontend] Port %FRONTEND_PORT% in use, trying next...
+        set /a FRONTEND_PORT+=1
+        goto CHECK_FRONTEND
+    ) else (
+        echo [ERROR] All frontend ports (3000-3010) are in use
+        exit /b 1
+    )
+)
+
+echo [Backend] Using port: %BACKEND_PORT%
+echo [Frontend] Using port: %FRONTEND_PORT%
+echo.
+
+echo [Config] Updating frontend API proxy...
+cd /d "%PROJECT_ROOT%\frontend"
+powershell -Command "(Get-Content next.config.js) -replace 'localhost:d+', 'localhost:%BACKEND_PORT%' | Set-Content next.config.js"
+
+echo [Backend] Starting...
+
+set "PYTHONPATH=%PROJECT_ROOT%\..;%PYTHONPATH%"
+
+cd /d "%PROJECT_ROOT%\backend"
+if exist "venv\Scripts\activate.bat" (
+    call venv\Scripts\activate.bat
+)
+start "Backend-%BACKEND_PORT%" /min cmd /c "cd /d `"%PROJECT_ROOT%\..`" && python -m tantan.backend.main --port %BACKEND_PORT%"
+
+timeout /t 3 /nobreak > nul
+echo [Backend] Running in background (port %BACKEND_PORT%)
+
+echo [Frontend] Starting...
+cd /d "%PROJECT_ROOT%\frontend"
+start "Frontend-%FRONTEND_PORT%" cmd /c "npm run dev"
+
+timeout /t 5 /nobreak > nul
+
+echo [Browser] Opening http://localhost:%FRONTEND_PORT%
+start http://localhost:%FRONTEND_PORT%
+
+echo.
+echo ========================================
+echo   Done!
+echo   Backend: http://localhost:%BACKEND_PORT%
+echo   Frontend: http://localhost:%FRONTEND_PORT%
+echo ========================================
+"@
+
+[System.IO.File]::WriteAllText("C:\Users\25776\Desktop\work\claude_workspace\tantan\tantan\start.bat", $content)
+Write-Output "Done"
