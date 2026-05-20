@@ -1,4 +1,63 @@
-node_modules/
-.next/
+# ============ Python ============
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 虚拟环境
+backend/venv/
 venv/
-__pycache__/
+env/
+.venv/
+
+# ============ Node / Next.js ============
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
+node_modules/
+
+# ============ 环境变量 (保留 example) ============
+.env
+.env.*
+*.env
+!.env.example
+!*.env.example
+
+# ============ 日志 ============
+*.log
+logs/*
+!logs/.gitkeep
+frontend.log
+
+# ============ 用户上传 (保留目录与说明) ============
+uploads/*
+!uploads/.gitkeep
+!uploads/CLAUDE.md
+
+# ============ 构建产物 ============
+build/
+dist/
+*.egg-info/
+
+# ============ IDE / 编辑器 ============
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cursor/
+
+# ============ 操作系统 ============
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============ 其它临时 ============
+*.bak
+*.tmp
+*.orig

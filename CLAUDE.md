@@ -8,7 +8,16 @@
 tantan/
 ├── backend/          # FastAPI后端服务
 ├── frontend/         # Next.js前端应用
-└── uploads/          # 用户上传文件存储目录
+├── docs/             # 项目文档（Code Review、改进记录）
+├── scripts/          # 辅助脚本
+├── uploads/          # 用户上传文件（不纳入版本控制）
+├── logs/             # 运行日志（不纳入版本控制）
+├── test_doc/         # 测试文档数据
+├── start.bat         # Windows 一键启动
+├── start.sh          # Linux/macOS 启动
+├── stop.bat          # Windows 停止
+├── restart.bat       # Windows 重启
+└── CLAUDE.md         # 项目说明
 ```
 
 ## 技术栈

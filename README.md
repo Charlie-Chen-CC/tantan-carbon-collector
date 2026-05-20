@@ -47,12 +47,16 @@ tantan/
 │   ├── agents/      # AI Agent 模块
 │   ├── api/          # REST API 路由
 │   ├── rag/          # RAG 知识库检索
+│   ├── state/        # 状态管理
 │   └── models/       # 数据库模型
 ├── frontend/         # Next.js 前端应用
 │   ├── app/          # App Router 页面
 │   ├── components/   # React 组件
 │   └── services/     # API 服务层
-└── uploads/          # 用户上传文件存储
+├── docs/             # 项目文档
+├── scripts/          # 辅助脚本
+├── uploads/          # 用户上传文件存储（不纳入版本控制）
+└── logs/             # 运行日志（不纳入版本控制）
 ```
 
 ## 环境变量
