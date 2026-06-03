@@ -1,19 +1,62 @@
 -i https://mirrors.aliyun.com/pypi/simple/
+# 如果阿里云镜像不可用，注释上面这行，使用官方源
 
+# Web框架
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
-celery[redis]==5.3.6
-redis==5.0.1
-python-multipart==0.0.6
-openpyxl==3.1.2
-pydantic>=2.10.0
-python-dotenv==1.0.0
 sse-starlette==1.8.2
-numpy>=2.0.0
-requests==2.31.0
+python-multipart==0.0.6
 
-# LangChain ecosystem
+# 数据库
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
+# Redis
+redis==5.0.1
+
+# AI/LLM
+dashscope>=1.20.0
 langchain>=0.3.0
-langchain-openai>=0.2.0
-langchain-core>=0.3.0
+langchain-postgres>=0.0.12  # S3.5 PGVector 修复
 langgraph>=0.2.0
+
+# 向量数据库
+pgvector>=0.3.6
+psycopg[binary]>=3.2.0
+
+# 配置文件
+python-dotenv==1.0.0
+pydantic>=2.10.0
+
+# 文件处理
+openpyxl==3.1.2
+pdfplumber>=0.11.0
+python-docx>=1.1.0
+python-pptx>=0.6.23
+Pillow>=10.0.0
+python-magic-bin==0.4.14; sys_platform == "win32"  # S1 真实 MIME 探测（Windows 平台）
+python-magic==0.4.27; sys_platform != "win32"        # Linux/macOS（系统需 libmagic1，已在 Dockerfile 装）
+
+# 数据处理
+numpy>=2.0.0
+pandas>=2.0.0
+
+# 网络请求
+requests==2.31.0
+httpx>=0.28.0
+
+# 日志（可选增强）
+colorlog>=6.8.0
+
+# 可观测性 - OpenTelemetry (Phase 5.6，默认关闭，需 OTEL_ENABLED=true)
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-instrumentation-fastapi==0.48b0
+# OTLP gRPC exporter 可选（设 OTEL_EXPORTER_OTLP_ENDPOINT 时启用）
+# opentelemetry-exporter-otlp-proto-grpc==1.27.0
+
+# 可观测性 - Prometheus 指标 (Phase 5.7，默认关闭，需 METRICS_ENABLED=true)
+prometheus-client==0.21.0
+
+# 速率限制 (Phase 5.8，默认开启，需 RATELIMIT_ENABLED=false 关闭)
+slowapi==0.1.9

@@ -1,6 +1,79 @@
 """
 工具模块
 """
-from tantan.backend.utils.logger import get_logger, get_logger_for_module, log_exception, TraceContext, get_trace_id
+from tantan.backend.utils.logger import (
+    get_logger,
+    get_logger_for_module,
+    log_exception,
+    TraceContext,
+    get_trace_id,
+    configure_default_logging,
+)
+from tantan.backend.utils.exceptions import AppException, ErrorCode
+from tantan.backend.utils.telemetry import (
+    setup_telemetry,
+    is_telemetry_enabled,
+    is_telemetry_configured,
+    get_tracer,
+)
+from tantan.backend.utils.metrics import (
+    setup_metrics,
+    is_metrics_enabled,
+    is_metrics_configured,
+    record_llm_call,
+    record_chat_stream_chunk,
+    http_requests_total,
+    http_request_duration_seconds,
+    llm_calls_total,
+    chat_stream_chunks_total,
+    app_info,
+)
+from tantan.backend.utils.ratelimit import (
+    setup_ratelimit,
+    is_ratelimit_enabled,
+    is_ratelimit_configured,
+    get_limiter,
+    limit_auth,
+    limit_upload,
+    limit_chat,
+    GLOBAL_DEFAULT,
+    AUTH_DEFAULT,
+    UPLOAD_DEFAULT,
+    CHAT_DEFAULT,
+)
 
-__all__ = ['get_logger', 'get_logger_for_module', 'log_exception', 'TraceContext', 'get_trace_id']
+__all__ = [
+    'get_logger',
+    'get_logger_for_module',
+    'log_exception',
+    'TraceContext',
+    'get_trace_id',
+    'configure_default_logging',
+    'AppException',
+    'ErrorCode',
+    'setup_telemetry',
+    'is_telemetry_enabled',
+    'is_telemetry_configured',
+    'get_tracer',
+    'setup_metrics',
+    'is_metrics_enabled',
+    'is_metrics_configured',
+    'record_llm_call',
+    'record_chat_stream_chunk',
+    'http_requests_total',
+    'http_request_duration_seconds',
+    'llm_calls_total',
+    'chat_stream_chunks_total',
+    'app_info',
+    'setup_ratelimit',
+    'is_ratelimit_enabled',
+    'is_ratelimit_configured',
+    'get_limiter',
+    'limit_auth',
+    'limit_upload',
+    'limit_chat',
+    'GLOBAL_DEFAULT',
+    'AUTH_DEFAULT',
+    'UPLOAD_DEFAULT',
+    'CHAT_DEFAULT',
+]

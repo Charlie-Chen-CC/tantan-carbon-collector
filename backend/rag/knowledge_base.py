@@ -237,7 +237,7 @@ class RAGRetriever:
             vectors = self.embedding_model.encode(contents)
             self.vector_store.add_batch(vectors, documents, chunk_ids)
         except Exception as e:
-            logger.error(f"批量添加知识失败: count={len(chunks)}, error: {str(e)}", exc_info=True)
+            logger.error(f"批量添加知识失败: count={len(chunk_ids)}, error: {str(e)}", exc_info=True)
 
         return chunk_ids
 

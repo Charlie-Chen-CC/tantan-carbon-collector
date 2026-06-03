@@ -1,28 +1,20 @@
 """
-阿里云LLM客户端 - 碳管师收资系统
-接入通义千问系列模型
-内部使用 LangChain 进行封装
-"""
+阿里云 DashScope LLM/Embedding 客户端 - 碳管师收资系统
+Phase 2.6：直接用 dashscope SDK，不再走 LangChain 三层包装。
 
+原 LangChain 包装（langchain_llm.py）已删除，逻辑全部内联于此。
+"""
 import json
 from typing import Dict, Any, Optional, List, Iterator, Union
 
 from tantan.backend.config import get_config
-from tantan.backend.rag.langchain_llm import (
-    LangChainLLM,
-    LangChainEmbeddings,
-    get_langchain_llm,
-    get_langchain_embeddings
-)
 from tantan.backend.utils import get_logger
 
 logger = get_logger(__name__)
 
 
 class AliLLMClient:
-    """阿里云通义千问LLM客户端 - 保留原有接口，内部委托LangChain"""
-
-    API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+    """阿里云通义千问 LLM 客户端 - dashscope SDK 直连"""
 
     def __init__(self, api_key: Optional[str] = None):
         config = get_config()
@@ -31,84 +23,105 @@ class AliLLMClient:
         self.temperature = config.LLM_TEMPERATURE
         self.max_tokens = config.LLM_MAX_TOKENS
 
-        self._lc_llm = LangChainLLM(api_key=self.api_key, model=self.model)
+    def _call(
+        self,
+        messages: List[Dict[str, str]],
+        stream: bool = False,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Union[Dict[str, Any], Iterator[Dict[str, Any]]]:
+        """内部：调用 dashscope Generation.call"""
+        from dashscope import Generation
+
+        kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "api_key": self.api_key,
+            "result_format": "message",
+        }
+        if stream:
+            kwargs["stream"] = True
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        else:
+            kwargs["temperature"] = self.temperature
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        else:
+            kwargs["max_tokens"] = self.max_tokens
+
+        if stream:
+            return self._stream_call(kwargs)
+        return self._sync_call(kwargs)
+
+    def _sync_call(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        from dashscope import Generation
+        try:
+            response = Generation.call(**kwargs)
+            if response.status_code == 200:
+                msg = response.output.choices[0].message
+                return {
+                    "content": msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", ""),
+                    "role": "assistant",
+                    "finish_reason": "stop",
+                }
+            return {"content": "", "error": f"dashscope status {response.status_code}: {response.message}"}
+        except Exception as e:
+            logger.error(f"dashscope Generation.call 失败: {e}", exc_info=True)
+            return {"content": "", "error": str(e)}
+
+    def _stream_call(self, kwargs: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+        from dashscope import Generation
+        try:
+            responses = Generation.call(**kwargs)
+            for response in responses:
+                if response.status_code == 200:
+                    msg = response.output.choices[0].message
+                    content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                    yield {"content": content, "role": "assistant", "finish_reason": None}
+                else:
+                    yield {"content": "", "error": f"status {response.status_code}", "finish_reason": "stop"}
+        except Exception as e:
+            logger.error(f"dashscope 流式生成失败: {e}", exc_info=True)
+            yield {"content": "", "error": str(e), "finish_reason": "stop"}
 
     def generate(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stream: bool = False
-    ) -> Union[Dict[str, Any], Iterator[str]]:
-        """
-        生成文本
+        stream: bool = False,
+        **kwargs,
+    ) -> Union[Dict[str, Any], Iterator[Dict[str, Any]]]:
+        """生成文本"""
+        messages: List[Dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        return self._call(messages, stream=stream, **kwargs)
 
-        Args:
-            prompt: 用户输入提示
-            system_prompt: 系统提示
-            model: 模型名称（覆盖默认）
-            temperature: 温度参数
-            max_tokens: 最大token数
-            stream: 是否流式输出
-
-        Returns:
-            非流式: 包含生成结果的字典
-            流式: 生成器yield文本片段
-        """
-        # 使用 LangChain LLM
-        return self._lc_llm.generate(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            stream=stream,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-
-    def _generate_stream(
+    def chat(
         self,
-        headers: Dict[str, str],
-        payload: Dict[str, Any]
-    ) -> Iterator[str]:
-        """流式生成（保留兼容）"""
-        return self._lc_llm.generate(prompt=payload.get("input", {}).get("messages", [{"content": ""}])[-1].get("content", ""), stream=True)
-
-    def chat(self, messages: List[Dict[str, Any]], **kwargs) -> Dict[str, Any]:
-        """
-        对话模式
-
-        Args:
-            messages: 消息列表 [{"role": "user", "content": "..."}] 或支持多模态 [{"role": "user", "content": [{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {"url": "data:image/..."}}]}]
-            **kwargs: 其他参数
-
-        Returns:
-            包含回复的字典
-        """
-        result = self._lc_llm.chat(messages, stream=False)
-        if isinstance(result, dict):
-            return result
-        return {"content": str(result), "error": None}
-
-    def _parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
-        """解析API响应"""
-        if "content" in response:
-            return {
-                "content": response["content"],
-                "role": response.get("role", "assistant"),
-                "finish_reason": response.get("finish_reason", "stop")
-            }
-        return {"content": "", "error": response.get("error", "Unknown error")}
+        messages: List[Dict[str, Any]],
+        stream: bool = False,
+        **kwargs,
+    ) -> Union[Dict[str, Any], Iterator[Dict[str, Any]]]:
+        """对话模式（messages 已是 OpenAI 风格）"""
+        normalized = []
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            normalized.append({"role": role, "content": content})
+        return self._call(normalized, stream=stream, **kwargs)
 
     def count_tokens(self, text: str) -> int:
-        """估算token数量（简单估算）"""
+        """估算 token 数量"""
         return len(text) // 2 + len(text.split())
 
 
 class AliEmbeddingClient:
-    """阿里云文本嵌入客户端 - 保留原有接口，内部委托LangChain"""
+    """阿里云文本嵌入客户端 - dashscope SDK 直连"""
 
-    API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-embedding/embedding"
+    API_URL = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-embedding/text-embedding"
 
     def __init__(self, api_key: Optional[str] = None):
         config = get_config()
@@ -116,54 +129,40 @@ class AliEmbeddingClient:
         self.model = config.EMBEDDING_MODEL
         self.dimension = config.EMBEDDING_DIM
 
-        self._lc_embeddings = LangChainEmbeddings(api_key=self.api_key, model=self.model)
-
     def encode(self, texts: List[str], model: Optional[str] = None) -> Dict[str, Any]:
-        """
-        生成文本嵌入向量
-
-        Args:
-            texts: 文本列表
-            model: 模型名称（覆盖默认）
-
-        Returns:
-            包含嵌入向量的字典
-        """
+        """生成文本嵌入向量"""
+        from dashscope import TextEmbedding
         try:
-            embeddings = self._lc_embeddings.encode(texts)
-            return {
-                "embeddings": embeddings,
-                "model": self.model,
-                "dimension": len(embeddings[0]) if embeddings else 0
-            }
+            resp = TextEmbedding.call(
+                model=model or self.model,
+                input=texts,
+                api_key=self.api_key,
+            )
+            if resp.status_code == 200:
+                embeddings = [item["embedding"] for item in resp.output["embeddings"]]
+                return {
+                    "embeddings": embeddings,
+                    "model": model or self.model,
+                    "dimension": len(embeddings[0]) if embeddings else 0,
+                }
+            return {"embeddings": [], "error": f"status {resp.status_code}: {resp.message}"}
         except Exception as e:
+            logger.error(f"dashscope TextEmbedding 失败: {e}", exc_info=True)
             return {"embeddings": [], "error": str(e)}
 
     def encode_single(self, text: str) -> List[float]:
-        """
-        生成单个文本的嵌入向量
-
-        Args:
-            text: 输入文本
-
-        Returns:
-            嵌入向量
-        """
-        return self._lc_embeddings.encode_single(text)
-
-    def _parse_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
-        """解析API响应"""
-        if "embeddings" in response:
-            return response
-        return {"embeddings": [], "error": response.get("error", "Unknown error")}
+        """单个文本嵌入"""
+        result = self.encode([text])
+        emb = result.get("embeddings", [])
+        return emb[0] if emb else []
 
 
-# 工厂函数 - 保留向后兼容
+# 工厂函数
 def get_llm_client() -> AliLLMClient:
-    """获取LLM客户端实例"""
+    """获取 LLM 客户端实例"""
     return AliLLMClient()
 
 
 def get_embedding_client() -> AliEmbeddingClient:
-    """获取嵌入向量客户端实例"""
+    """获取嵌入客户端实例"""
     return AliEmbeddingClient()

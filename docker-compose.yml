@@ -1,0 +1,91 @@
+# 碳管师收资系统 - Docker Compose (Phase 6.9)
+# 一键拉起 backend + frontend + postgres + redis
+#
+# 用法：
+#   cd claude_workspace
+#   docker compose -f tantan/docker-compose.yml up -d            # 全部服务
+#   docker compose -f tantan/docker-compose.yml logs -f backend  # 跟踪后端日志
+#   docker compose -f tantan/docker-compose.yml down -v          # 停服并清数据卷
+
+version: "3.9"
+
+services:
+  # ============== PostgreSQL（含 pgvector 扩展）==============
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: tantan-postgres
+    environment:
+      POSTGRES_USER: tantan_user
+      POSTGRES_PASSWORD: tantan_password
+      POSTGRES_DB: tantan
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./tantan/backend/scripts/init_pgvector.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tantan_user -d tantan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============== Redis（Token 存储 + Celery broker 预留）==============
+  redis:
+    image: redis:7-alpine
+    container_name: tantan-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============== 后端 ==============
+  backend:
+    build:
+      context: ..
+      dockerfile: tantan/backend/Dockerfile
+    container_name: tantan-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://tantan_user:tantan_password@postgres:5432/tantan
+      REDIS_URL: redis://redis:6379/0
+      VECTOR_DB_TYPE: pgvector
+      PGVECTOR_CONN: postgresql://tantan_user:tantan_password@postgres:5432/tantan
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?请在 .env 或环境变量中设置 DASHSCOPE_API_KEY}
+      ENVIRONMENT: production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      COOKIE_SECURE: "true"
+      LOG_JSON: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/tantan/uploads
+      - logs_data:/app/tantan/logs
+
+  # ============== 前端 ==============
+  frontend:
+    build:
+      context: ..
+      dockerfile: tantan/frontend/Dockerfile
+    container_name: tantan-frontend
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  logs_data:

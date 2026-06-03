@@ -1,0 +1,218 @@
+{
+  "$comment": "字段映射 SSOT (Single Source of Truth) - Phase 6.2",
+  "version": "1.0.0",
+  "schema_version": "1",
+  "last_updated": "2026-06-03",
+  "comment": "前后端字段定义的中文-英文映射单一来源。修改此文件后跑 `python -m tantan.backend.scripts.codegen_field_schema` 重新生成 backend/agents/form_filler/{mapping,section_defs,transformers}.py + frontend/config/sectionConfig.ts。详见 CLAUDE.md。",
+  "sections": [
+    {
+      "id": 1,
+      "name": "基本信息",
+      "fields": [
+        {"backend": "企业名称", "frontend": "enterpriseName", "type": "text", "required": true, "placeholder": "请输入企业全称"},
+        {"backend": "所属行业", "frontend": "industry", "type": "text", "required": true, "placeholder": "请输入所属行业"},
+        {"backend": "联系人", "frontend": "contact", "type": "text", "placeholder": "请输入联系人姓名"},
+        {"backend": "联系方式", "frontend": "contactPhone", "type": "text", "placeholder": "请输入电话或邮箱"},
+        {"backend": "生产地址", "frontend": "productionAddress", "type": "text", "placeholder": "请输入生产地址"},
+        {"backend": "核算年份", "frontend": "reportingYear", "type": "text", "placeholder": "如 2024"},
+        {"backend": "核算周期说明", "frontend": "reportingPeriod", "type": "text", "placeholder": "如 2024.1.1~2024.12.31"},
+        {"backend": "是否为自然年（1月1日-12月31日）", "frontend": "isCalendarYear", "type": "select", "options": ["是", "否"]}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "产品",
+      "fields": [
+        {"backend": "PCF核算目标产品名称", "frontend": "targetProductName", "type": "text", "required": true},
+        {"backend": "是否为生产工厂唯一产品", "frontend": "isOnlyProduct", "type": "select", "options": ["是", "否"]},
+        {"backend": "其他产品1名称", "frontend": "otherProduct1Name", "type": "text"},
+        {"backend": "其他产品2名称", "frontend": "otherProduct2Name", "type": "text"},
+        {"backend": "其他产品3名称", "frontend": "otherProduct3Name", "type": "text"},
+        {"backend": "其他产品4名称", "frontend": "otherProduct4Name", "type": "text"},
+        {"backend": "其他产品5名称", "frontend": "otherProduct5Name", "type": "text"},
+        {"backend": "其他产品超过5种的说明", "frontend": "otherProductsNote", "type": "text"},
+        {"backend": "计量单位", "frontend": "unit", "type": "select", "options": ["t", "m3", "m2", "m", "只/个"]},
+        {"backend": "目标产品产线内是否有副产品", "frontend": "hasByproduct", "type": "select", "options": ["是", "否"]},
+        {"backend": "副产品1名称", "frontend": "byproduct1Name", "type": "text"},
+        {"backend": "副产品2名称", "frontend": "byproduct2Name", "type": "text"},
+        {"backend": "副产品3名称", "frontend": "byproduct3Name", "type": "text"},
+        {"backend": "副产品4名称", "frontend": "byproduct4Name", "type": "text"},
+        {"backend": "副产品5名称", "frontend": "byproduct5Name", "type": "text"},
+        {"backend": "副产品超过5种的说明", "frontend": "byproductsNote", "type": "text"}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "燃料使用",
+      "fields": [
+        {"backend": "生产用锅炉燃料", "frontend": "boilerFuel", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"},
+          {"frontend": "amount", "backend": "使用量"},
+          {"frontend": "unit", "backend": "单位"},
+          {"frontend": "measuredCalorific", "backend": "实测热值"},
+          {"frontend": "calorificUnit", "backend": "热值单位"}
+        ]},
+        {"backend": "专用废气焚烧炉燃料", "frontend": "wasteIncineratorFuel", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"},
+          {"frontend": "amount", "backend": "使用量"},
+          {"frontend": "unit", "backend": "单位"}
+        ]},
+        {"backend": "危废焚烧炉燃料", "frontend": "hazardousWasteBurnerFuel", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"},
+          {"frontend": "amount", "backend": "使用量"},
+          {"frontend": "unit", "backend": "单位"}
+        ]},
+        {"backend": "发电机燃料", "frontend": "generatorFuel", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"},
+          {"frontend": "amount", "backend": "使用量"},
+          {"frontend": "unit", "backend": "单位"}
+        ]},
+        {"backend": "食堂炉灶燃料", "frontend": "canteenFuel", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"},
+          {"frontend": "amount", "backend": "使用量"},
+          {"frontend": "unit", "backend": "单位"}
+        ]},
+        {"backend": "厂内转运叉车燃料", "frontend": "forkliftFuel", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"},
+          {"frontend": "amount", "backend": "使用量"},
+          {"frontend": "unit", "backend": "单位"}
+        ]},
+        {"backend": "自有商务车92#", "frontend": "commercialVehicle92", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"}
+        ]},
+        {"backend": "自有商务车95#", "frontend": "commercialVehicle95", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"}
+        ]},
+        {"backend": "自有商务车98#", "frontend": "commercialVehicle98", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"}
+        ]},
+        {"backend": "自有道路车辆燃料-柴油", "frontend": "roadVehicleDiesel", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"}
+        ]},
+        {"backend": "切割、焊接燃料", "frontend": "weldingFuel", "type": "multi-row", "sub_fields": [
+          {"frontend": "fuelType", "backend": "燃料类型"}
+        ]}
+      ]
+    },
+    {
+      "id": 4,
+      "name": "电力、热力使用",
+      "fields": [
+        {"backend": "全厂用电", "frontend": "totalElectricityMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "全厂用电量", "frontend": "totalElectricityAmount", "type": "text"},
+        {"backend": "生产用电", "frontend": "productionElectricityMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "生产用电量", "frontend": "productionElectricityAmount", "type": "text"},
+        {"backend": "行政办公用电", "frontend": "officeElectricityMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "行政办公用电量", "frontend": "officeElectricityAmount", "type": "text"},
+        {"backend": "目标产品产线用电", "frontend": "productLineElectricityMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "目标产品产线用电量", "frontend": "productLineElectricityAmount", "type": "text"},
+        {"backend": "单耗用电", "frontend": "unitConsumptionElectricityMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "单耗用电量", "frontend": "unitConsumptionElectricityAmount", "type": "text"},
+        {"backend": "光伏发电量", "frontend": "solarGeneration", "type": "text"},
+        {"backend": "光伏发电配置", "frontend": "solarConfig", "type": "select"},
+        {"backend": "是否购买绿证", "frontend": "greenCertificate", "type": "select"},
+        {"backend": "绿证购买量", "frontend": "greenCertificateAmount", "type": "text"},
+        {"backend": "是否购买排放权益", "frontend": "emissionRights", "type": "select"},
+        {"backend": "排放权益购买量", "frontend": "emissionRightsAmount", "type": "text"},
+        {"backend": "蒸汽温度", "frontend": "steamTemperature", "type": "text"},
+        {"backend": "蒸汽压力", "frontend": "steamPressure", "type": "text"},
+        {"backend": "全厂用蒸汽", "frontend": "totalSteamMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "全厂蒸汽量", "frontend": "totalSteamAmount", "type": "text"},
+        {"backend": "生产用蒸汽", "frontend": "productionSteamMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "生产蒸汽量", "frontend": "productionSteamAmount", "type": "text"},
+        {"backend": "行政类用蒸汽", "frontend": "officeSteamMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "行政类蒸汽量", "frontend": "officeSteamAmount", "type": "text"},
+        {"backend": "目标产品产线用蒸汽", "frontend": "productLineSteamMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "目标产品产线蒸汽量", "frontend": "productLineSteamAmount", "type": "text"},
+        {"backend": "单耗用蒸汽", "frontend": "unitConsumptionSteamMeasurable", "type": "select", "options": ["可单独统计", "不可单独统计"]},
+        {"backend": "单耗蒸汽量", "frontend": "unitConsumptionSteamAmount", "type": "text"}
+      ]
+    },
+    {
+      "id": 5,
+      "name": "制冷剂使用",
+      "fields": [
+        {"backend": "空调制冷剂", "frontend": "airConditioners", "type": "multi-row", "is_array": true, "sub_fields": [
+          {"frontend": "equipmentName", "backend": "设备名称"},
+          {"frontend": "refrigerantNo", "backend": "标号"},
+          {"frontend": "fillAmount", "backend": "填充量"}
+        ]},
+        {"backend": "冷冻机制冷剂", "frontend": "freezers", "type": "multi-row", "is_array": true, "sub_fields": [
+          {"frontend": "equipmentName", "backend": "设备名称"},
+          {"frontend": "refrigerantNo", "backend": "标号"},
+          {"frontend": "fillAmount", "backend": "填充量"}
+        ]}
+      ]
+    },
+    {
+      "id": 6,
+      "name": "其他散逸类排放",
+      "fields": [
+        {"backend": "CO2灭火器填充总量", "frontend": "co2Extinguisher", "type": "text"},
+        {"backend": "核算期内员工总工时", "frontend": "employeeHours", "type": "text"}
+      ]
+    },
+    {
+      "id": 7,
+      "name": "三废处理",
+      "fields": [
+        {"backend": "废水处理方式", "frontend": "wastewaterTreatmentMethod", "type": "text"},
+        {"backend": "废水处理量", "frontend": "wastewaterAmount", "type": "text"},
+        {"backend": "目标产品产线废水", "frontend": "productLineWastewater", "type": "text"},
+        {"backend": "COD浓度", "frontend": "codConcentration", "type": "text"},
+        {"backend": "污水处理药剂1", "frontend": "wastewaterAgent1", "type": "text"},
+        {"backend": "污水处理药剂2", "frontend": "wastewaterAgent2", "type": "text"},
+        {"backend": "污水处理药剂3", "frontend": "wastewaterAgent3", "type": "text"},
+        {"backend": "废气处理方式", "frontend": "exhaustGasTreatmentMethod", "type": "text"},
+        {"backend": "危废委外焚烧总量", "frontend": "outsourcedIncinerationTotal", "type": "text"},
+        {"backend": "危废委外焚烧目标产品产线分解", "frontend": "outsourcedIncinerationProductLine", "type": "text"},
+        {"backend": "危废自行焚烧总量", "frontend": "selfIncinerationTotal", "type": "text"},
+        {"backend": "危废自行焚烧目标产品产线分解", "frontend": "selfIncinerationProductLine", "type": "text"},
+        {"backend": "危废委外资源化总量", "frontend": "outsourcedRecyclingTotal", "type": "text"},
+        {"backend": "危废委外资源化目标产品产线分解", "frontend": "outsourcedRecyclingProductLine", "type": "text"},
+        {"backend": "危废自行资源化总量", "frontend": "selfRecyclingTotal", "type": "text"},
+        {"backend": "危废自行资源化目标产品产线分解", "frontend": "selfRecyclingProductLine", "type": "text"},
+        {"backend": "烟气处理药剂1", "frontend": "flueGasAgent1", "type": "text"},
+        {"backend": "烟气处理药剂2", "frontend": "flueGasAgent2", "type": "text"},
+        {"backend": "烟气处理药剂3", "frontend": "flueGasAgent3", "type": "text"},
+        {"backend": "烟气处理药剂4", "frontend": "flueGasAgent4", "type": "text"}
+      ]
+    },
+    {
+      "id": 8,
+      "name": "原材料使用",
+      "fields": [
+        {"backend": "PCF核算目标产品生产工艺流程文字描述", "frontend": "productionProcess", "type": "text"},
+        {"backend": "原材料", "frontend": "rawMaterials", "type": "multi-row", "is_array": true, "numeric_suffix": true, "sub_fields": [
+          {"frontend": "name", "backend": "名称"},
+          {"frontend": "spec", "backend": "规格"},
+          {"frontend": "amount", "backend": "使用量"},
+          {"frontend": "unit", "backend": "单位"}
+        ]},
+        {"backend": "供应商", "frontend": "suppliers", "type": "multi-row", "is_array": true, "numeric_suffix": true, "sub_fields": [
+          {"frontend": "name", "backend": "名称"},
+          {"frontend": "category", "backend": "品类"},
+          {"frontend": "transportMode", "backend": "运输方式"},
+          {"frontend": "transportDistance", "backend": "运距"}
+        ]}
+      ]
+    },
+    {
+      "id": 9,
+      "name": "生产耗材",
+      "fields": [
+        {"backend": "新鲜水", "frontend": "freshWater", "type": "nested", "nested": [
+          {"frontend": "freshWaterCaliber", "backend": "统计口径", "type": "select"},
+          {"frontend": "freshWaterAmount", "backend": "使用量", "type": "text"},
+          {"frontend": "freshWaterUnit", "backend": "单位", "type": "select"}
+        ]},
+        {"backend": "新鲜水使用量", "frontend": "freshWaterUsage", "type": "text"},
+        {"backend": "氮气", "frontend": "nitrogen", "type": "nested", "nested": [
+          {"frontend": "nitrogenCaliber", "backend": "统计口径", "type": "select"},
+          {"frontend": "nitrogenAmount", "backend": "使用量", "type": "text"},
+          {"frontend": "nitrogenUnit", "backend": "单位", "type": "select"}
+        ]}
+      ]
+    }
+  ]
+}

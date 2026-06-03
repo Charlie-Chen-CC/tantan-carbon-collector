@@ -7,9 +7,10 @@
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Iterator
 
 from tantan.backend.rag import get_rag_pipeline, get_rag_searcher, get_knowledge_base
+from tantan.backend.rag.ali_llm import get_llm_client
 from tantan.backend.utils import get_logger, log_exception
 
 logger = get_logger(__name__)
@@ -353,40 +354,193 @@ class QAAgent:
         """获取对话历史"""
         return self.conversation_history
 
+    def generate_response_stream(
+        self, message: str, context: Optional[Dict[str, Any]] = None
+    ) -> Iterator[Dict[str, Any]]:
+        """流式生成回复 - Phase 5.3 真实流式：LLM token-by-token
 
-class KnowledgeBase_retriever:
-    """知识库检索器（用于RAG）- 保留以兼容旧代码"""
+        Yields dict 事件：
+        - {"event": "intent", "intent": ..., "msg_id": ..., "session_id": ..., "timestamp": ...}
+        - {"event": "message", "chunk": "..."}  （每个 token / 字符片段）
+        - {"event": "done", "full_content": "..."}
+        """
+        intent = self.analyze_intent(message)
+        msg_id = str(uuid.uuid4())
+        timestamp = datetime.now().isoformat()
 
-    def __init__(self):
-        self._rag_searcher = None
+        yield {
+            "event": "intent",
+            "intent": intent,
+            "msg_id": msg_id,
+            "session_id": self.session_id,
+            "timestamp": timestamp,
+        }
 
-    @property
-    def rag_searcher(self):
-        """延迟加载RAG搜索器"""
-        if self._rag_searcher is None:
-            self._rag_searcher = get_rag_searcher()
-        return self._rag_searcher
+        if intent == IntentType.GENERAL_KNOWLEDGE:
+            chunk_iter: Iterator[str] = self._stream_general_question(message)
+        elif intent == IntentType.PROFESSIONAL_QUESTION:
+            chunk_iter = self._stream_professional_question(message, context)
+        elif intent == IntentType.GUIDANCE:
+            chunk_iter = self._stream_guidance(message, context)
+        elif intent == IntentType.CHITCHAT:
+            chunk_iter = self._stream_chitchat(message)
+        else:
+            chunk_iter = self._stream_unknown(message)
 
-    def _load_knowledge_base(self) -> List[Dict[str, Any]]:
-        """加载知识库"""
-        kb = get_knowledge_base()
-        stats = kb.get_stats()
-        return [
-            {
-                "topic": "碳排放核算",
-                "content": f"知识库共有{stats['total_chunks']}条知识条目",
-                "source": "RAG知识库"
-            }
-        ]
+        full_content = ""
+        for chunk in chunk_iter:
+            if not chunk:
+                continue
+            full_content += chunk
+            yield {"event": "message", "chunk": chunk}
 
-    def retrieve(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        """检索相关知识"""
-        results = self.rag_searcher.search(query, top_k=top_k)
-        return [
-            {
-                "topic": r.metadata.get("topic", "未知"),
-                "content": r.content,
-                "source": r.metadata.get("source", "未知")
-            }
-            for r in results
-        ]
+        yield {"event": "done", "full_content": full_content}
+
+        self.conversation_history.append({
+            "user": message,
+            "assistant": full_content,
+            "intent": intent,
+            "timestamp": timestamp,
+        })
+
+    def _stream_llm_chat(self, messages: List[Dict[str, str]]) -> Iterator[str]:
+        """直接 LLM 流式调用 - 逐 token yield 增量 content"""
+        try:
+            llm_client = get_llm_client()
+            stream = llm_client.chat(messages, stream=True)
+            for chunk in stream:
+                if not isinstance(chunk, dict):
+                    continue
+                if chunk.get("error"):
+                    logger.error(f"LLM 流式返回 error: {chunk['error']}")
+                    break
+                content = chunk.get("content", "")
+                if content:
+                    yield content
+                if chunk.get("finish_reason") == "stop":
+                    break
+        except Exception as e:
+            logger.error(f"LLM 流式调用失败: {e}", exc_info=True)
+
+    def _stream_general_question(self, question: str) -> Iterator[str]:
+        """流式回答通用问题（时间等）"""
+        if any(kw in question for kw in ["时间", "几点", "现在", "几号", "日期"]):
+            current_time = self._get_current_time_str()
+            yield f"当前时间是：{current_time}"
+            return
+
+        current_time = self._get_current_time_str()
+        try:
+            messages = [
+                {"role": "system", "content": self.SYSTEM_PROMPT.format(current_time=current_time)},
+                {"role": "user", "content": question},
+            ]
+            emitted = False
+            for chunk in self._stream_llm_chat(messages):
+                emitted = True
+                yield chunk
+            if not emitted:
+                yield f"当前时间是：{current_time}"
+        except Exception as e:
+            logger.error(f"通用问题流式失败: {e}", exc_info=True)
+            yield f"当前时间是：{current_time}"
+
+    def _stream_professional_question(
+        self, question: str, context: Optional[Dict[str, Any]]
+    ) -> Iterator[str]:
+        """流式回答专业问题 - 优先 RAG 流式管道，失败降级直接 LLM 流式"""
+        try:
+            emitted = False
+            for chunk in self.rag_pipeline.answer_stream(question, context):
+                if chunk:
+                    emitted = True
+                    yield chunk
+            if emitted:
+                return
+        except Exception as e:
+            logger.error(f"RAG 流式失败: {e}", exc_info=True)
+
+        current_time = self._get_current_time_str()
+        try:
+            messages = [
+                {"role": "system", "content": self.SYSTEM_PROMPT.format(current_time=current_time)},
+                {"role": "user", "content": question},
+            ]
+            emitted = False
+            for chunk in self._stream_llm_chat(messages):
+                emitted = True
+                yield chunk
+            if emitted:
+                return
+        except Exception as e2:
+            logger.error(f"专业问题 LLM 流式降级失败: {e2}", exc_info=True)
+
+        yield self._rule_based_answer(question)
+
+    def _stream_guidance(
+        self, question: str, context: Optional[Dict[str, Any]]
+    ) -> Iterator[str]:
+        """流式提供填报指导 - 规则回答，一次性 yield 整段"""
+        current_section = context.get("current_section", 1) if context else 1
+        section_guides = {
+            1: "基本信息部分需要填写企业名称、所属行业、联系人等信息。请确保企业名称与营业执照一致。",
+            2: "产品部分需要填写PCF核算目标产品名称、是否唯一产品、计量单位等信息。",
+            3: "燃料使用部分需要填写各种燃烧设备的燃料类型和核算周期内的使用量。",
+            4: "电力、热力使用部分需要填写用电单元的统计情况和蒸汽参数。",
+            5: "制冷剂使用部分需要填写空调和冷冻机的制冷剂标号及填充量。",
+            6: "其他散逸类排放部分需要填写CO2灭火器的填充总量和员工总工时。",
+            7: "三废处理部分需要填写废水废气处理方式和危废处理量。",
+            8: "原材料使用部分需要填写PCF核算目标产品的原材料清单和供应商信息。",
+            9: "生产耗材部分需要填写新鲜水和氮气的使用量及统计口径。",
+        }
+        if any(kw in question for kw in ["当前", "现在", "这部分"]):
+            yield f"当前您正在填写第{current_section}部分：{section_guides.get(current_section, '未知部分')}"
+            return
+        yield (
+            f"目前您正在进行第{current_section}部分的填报。\n"
+            f"{section_guides.get(current_section, '')}\n\n"
+            "您可以：\n"
+            "1. 直接在表单中填写数据\n"
+            "2. 上传Excel文件，系统会自动提取数据\n"
+            "3. 随时暂停并切换到其他部分"
+        )
+
+    def _stream_chitchat(self, message: str) -> Iterator[str]:
+        """流式闲聊 - 规则回答，一次性 yield 整段"""
+        message_lower = message.lower()
+        current_time = self._get_current_time_str()
+        for farewell in ["再见", "拜拜", "bye", "下次见"]:
+            if farewell in message_lower:
+                yield "好的，再见！如有问题随时联系我。"
+                return
+        for greeting in ["你好", "您好", "hi", "hello", "嗨", "hey", "在吗", "在不在"]:
+            if greeting in message_lower:
+                yield f"您好！我是碳管师助手，请问有什么可以帮助您的？\n当前时间：{current_time}"
+                return
+        yield "您好！请问还有什么需要帮助的？"
+
+    def _stream_unknown(self, message: str) -> Iterator[str]:
+        """流式处理未知意图 - 先 LLM 流式，失败降级规则回答"""
+        current_time = self._get_current_time_str()
+        try:
+            messages = [
+                {"role": "system", "content": self.SYSTEM_PROMPT.format(current_time=current_time)},
+                {"role": "user", "content": message},
+            ]
+            emitted = False
+            for chunk in self._stream_llm_chat(messages):
+                emitted = True
+                yield chunk
+            if emitted:
+                return
+        except Exception as e:
+            logger.error(f"未知意图 LLM 流式失败: {e}", exc_info=True)
+        yield (
+            "抱歉，我不太理解您的问题。\n"
+            "您可以：\n"
+            "1. 询问碳排放相关的专业问题\n"
+            "2. 请求填报指导\n"
+            "3. 上传文件让系统帮您自动提取数据"
+        )
+
+

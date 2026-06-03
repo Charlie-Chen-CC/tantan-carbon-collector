@@ -1,16 +1,18 @@
 """
 统一日志模块 - 碳管师收资系统
-提供结构化日志、请求追踪、异常堆栈记录
+提供结构化日志、请求追踪、异常堆栈记录、日志轮转
 """
 
 import os
 import sys
 import logging
 import traceback
-from datetime import datetime
+from contextvars import ContextVar, Token
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from functools import wraps
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 
 # 确保 logs 目录存在
 LOG_DIR = Path("logs")
@@ -19,24 +21,47 @@ LOG_DIR.mkdir(exist_ok=True)
 # 日志文件路径
 LOG_FILE = LOG_DIR / "app.log"
 
+# 按模块分类的日志文件
+LOG_FILES = {
+    "api": LOG_DIR / "api.log",
+    "agent": LOG_DIR / "agent.log",
+    "state": LOG_DIR / "state.log",
+    "rag": LOG_DIR / "rag.log",
+    "error": LOG_DIR / "error.log",
+    "security": LOG_DIR / "security.log",
+}
+
+# Phase 5.4：trace_id 改用 contextvars 而非 threading.local
+# 原因：在 async 上下文中，asyncio.Task 可在 await 边界跨线程（如 run_in_executor），
+# threading.local 无法跨线程传播 trace_id。ContextVar 随 Task 一起传播，是 async 安全的。
+_trace_id_var: ContextVar[Optional[str]] = ContextVar("tantan_trace_id", default=None)
+
 
 class TraceContext:
-    """请求追踪上下文，使用 thread-local 存储 trace_id"""
+    """请求追踪上下文
 
-    import threading
-    _local = threading.local()
+    Phase 5.4：底层从 threading.local 切到 contextvars.ContextVar，
+    解决 async 跨线程时 trace_id 丢失的问题。
+    """
 
     @classmethod
     def get_trace_id(cls) -> Optional[str]:
-        return getattr(cls._local, 'trace_id', None)
+        return _trace_id_var.get()
 
     @classmethod
-    def set_trace_id(cls, trace_id: str) -> None:
-        cls._local.trace_id = trace_id
+    def set_trace_id(cls, trace_id: str) -> Token:
+        """设置 trace_id，返回 Token（与 ContextVar.set 约定一致）"""
+        return _trace_id_var.set(trace_id)
+
+    @classmethod
+    def reset(cls, token: Token) -> None:
+        """用 Token 还原到 set 之前的状态（推荐用于嵌套/异常路径）"""
+        _trace_id_var.reset(token)
 
     @classmethod
     def clear(cls) -> None:
-        cls._local.trace_id = None
+        """清空 trace_id（设为 None，保持与旧 API 兼容）"""
+        _trace_id_var.set(None)
 
 
 def get_trace_id() -> Optional[str]:
@@ -44,36 +69,54 @@ def get_trace_id() -> Optional[str]:
     return TraceContext.get_trace_id()
 
 
-class StructuredFormatter(logging.Formatter):
-    """结构化日志格式化器"""
+class TraceContextFilter(logging.Filter):
+    """日志过滤器：自动注入 trace_id"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.trace_id = get_trace_id() or "-"
+        return True
+
+
+class ConsoleFormatter(logging.Formatter):
+    """控制台格式：人类可读"""
 
     def format(self, record: logging.LogRecord) -> str:
-        trace_id = get_trace_id()
-        if trace_id:
-            record.trace_id = trace_id
-        else:
-            record.trace_id = "-"
+        record.trace_id = get_trace_id() or "-"
 
-        # 添加时间戳
-        record.timestamp = datetime.now().isoformat()
+        # 颜色码（只在TTY输出时启用）
+        RESET = "\033[0m" if sys.stdout.isatty() else ""
+        RED = "\033[31m" if sys.stdout.isatty() else ""
+        YELLOW = "\033[33m" if sys.stdout.isatty() else ""
+        BLUE = "\033[34m" if sys.stdout.isatty() else ""
+        GREEN = "\033[32m" if sys.stdout.isatty() else ""
 
-        # 格式化异常堆栈
+        level_colors = {
+            "ERROR": RED,
+            "WARNING": YELLOW,
+            "INFO": GREEN,
+            "DEBUG": BLUE,
+        }
+        color = level_colors.get(record.levelname, "")
+
+        # 简化时间
+        dt = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
+
+        msg = f"{color}[{dt}] [{record.trace_id[:8]}] {record.levelname:8} {record.name}: {record.getMessage()}{RESET}"
+
         if record.exc_info:
-            record.stack_trace = self.formatException(record.exc_info)
-        else:
-            record.stack_trace = ""
+            msg += f"\n{''.join(traceback.format_exception(*record.exc_info))}"
 
-        return super().format(record)
+        return msg
 
 
-class JsonFormatter(StructuredFormatter):
-    """JSON格式日志格式化器"""
+class JsonFormatter(logging.Formatter):
+    """JSON格式日志：便于程序解析"""
 
     def format(self, record: logging.LogRecord) -> str:
         import json
 
         log_data = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "module": record.module,
@@ -83,118 +126,95 @@ class JsonFormatter(StructuredFormatter):
             "message": record.getMessage(),
         }
 
-        if record.stack_trace:
-            log_data["stack_trace"] = record.stack_trace
-
-        # 添加 extra 字段
-        if hasattr(record, 'extra_data'):
-            log_data["extra"] = record.extra_data
+        if record.exc_info:
+            log_data["stack_trace"] = "".join(traceback.format_exception(*record.exc_info))
 
         return json.dumps(log_data, ensure_ascii=False)
 
 
-def setup_logger(
-    name: str,
-    level: int = logging.INFO,
-    log_file: Optional[str] = None,
-    use_json: bool = False
-) -> logging.Logger:
+def _get_log_level() -> int:
+    """从环境变量获取日志级别"""
+    level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+    return getattr(logging, level_str, logging.INFO)
+
+
+def _setup_module_logger(name: str) -> logging.Logger:
     """
-    设置日志记录器
-
-    Args:
-        name: 日志记录器名称
-        level: 日志级别
-        log_file: 日志文件路径（默认使用 logs/app.log）
-        use_json: 是否使用 JSON 格式
-
-    Returns:
-        配置好的 logger 实例
+    为单个模块设置日志记录器
+    会自动分类写入对应文件
     """
     logger = logging.getLogger(name)
-    logger.setLevel(level)
+    logger.setLevel(_get_log_level())
     logger.propagate = False
 
-    # 避免重复添加 handler
     if logger.handlers:
         return logger
 
-    # 控制台 Handler
+    # 添加 trace_id 过滤器
+    trace_filter = TraceContextFilter()
+    logger.addFilter(trace_filter)
+
+    # 控制台 Handler（人类可读）
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(level)
-
-    if use_json:
-        formatter = JsonFormatter()
-    else:
-        formatter = StructuredFormatter(
-            '%(timestamp)s | %(trace_id)s | %(levelname)-8s | %(name)s | %(message)s'
-        )
-
-        if hasattr(logging.LogRecord, 'stack_trace'):
-            formatter._fmt += ' | %(stack_trace)s'
-
-    console_handler.setFormatter(formatter)
+    console_handler.setLevel(_get_log_level())
+    console_handler.setFormatter(ConsoleFormatter())
     logger.addHandler(console_handler)
 
-    # 文件 Handler
-    file_path = log_file or str(LOG_FILE)
-    file_handler = logging.FileHandler(file_path, encoding='utf-8')
-    file_handler.setLevel(level)
+    # 根据模块名决定写入哪个文件
+    log_file = None
+    if name.startswith("tantan.backend.api") or name == "api":
+        log_file = LOG_FILES["api"]
+    elif name.startswith("tantan.backend.agents") or name.startswith("tantan.backend.agent"):
+        log_file = LOG_FILES["agent"]
+    elif name.startswith("tantan.backend.state"):
+        log_file = LOG_FILES["state"]
+    elif name.startswith("tantan.backend.rag"):
+        log_file = LOG_FILES["rag"]
+    elif "auth" in name.lower() or "login" in name.lower() or "logout" in name.lower():
+        log_file = LOG_FILES["security"]
+    else:
+        log_file = LOG_FILE
+
+    # 文件 Handler（JSON格式，支持轮转）
+    # 按日期轮转，保留30天
+    file_handler = TimedRotatingFileHandler(
+        filename=str(log_file),
+        when="midnight",
+        interval=1,
+        backupCount=30,
+        encoding="utf-8"
+    )
+    file_handler.setLevel(_get_log_level())
     file_handler.setFormatter(JsonFormatter())
     logger.addHandler(file_handler)
+
+    # 错误日志同时写入 error.log
+    if _get_log_level() <= logging.ERROR:
+        error_handler = TimedRotatingFileHandler(
+            filename=str(LOG_FILES["error"]),
+            when="midnight",
+            interval=1,
+            backupCount=30,
+            encoding="utf-8"
+        )
+        error_handler.setLevel(logging.ERROR)
+        error_handler.setFormatter(JsonFormatter())
+        logger.addHandler(error_handler)
 
     return logger
 
 
-def get_logger(name: str, level: Optional[int] = None) -> logging.Logger:
+def get_logger(name: str) -> logging.Logger:
     """
     获取日志记录器
 
     Args:
         name: 日志记录器名称（通常使用 __name__）
-        level: 日志级别（默认使用环境变量 LOG_LEVEL 或 INFO）
 
     Returns:
         Logger 实例
     """
-    if level is None:
-        level_str = os.getenv("LOG_LEVEL", "INFO").upper()
-        level = getattr(logging, level_str, logging.INFO)
-
-    return setup_logger(name, level)
-
-
-class Logger:
-    """
-    日志工具类，提供便捷的日志记录方法
-    """
-
-    @staticmethod
-    def error(logger: logging.Logger, message: str, exc_info: Optional[Exception] = None, **kwargs) -> None:
-        """记录错误日志"""
-        if exc_info:
-            extra_data = {"exc_info": str(exc_info), "traceback": traceback.format_exc()}
-            extra_data.update(kwargs)
-            # 使用 extra 传递额外数据
-            if hasattr(logger, '_log'):
-                for key, value in extra_data.items():
-                    setattr(logging.LogRecord, f'extra_{key}', value)
-        logger.error(message, exc_info=exc_info is not None)
-
-    @staticmethod
-    def info(logger: logging.Logger, message: str, **kwargs) -> None:
-        """记录信息日志"""
-        logger.info(message)
-
-    @staticmethod
-    def warning(logger: logging.Logger, message: str, **kwargs) -> None:
-        """记录警告日志"""
-        logger.warning(message)
-
-    @staticmethod
-    def debug(logger: logging.Logger, message: str, **kwargs) -> None:
-        """记录调试日志"""
-        logger.debug(message)
+    return _setup_module_logger(name)
 
 
 def log_exception(logger: logging.Logger, error: Exception, context: Optional[Dict[str, Any]] = None) -> None:
@@ -225,36 +245,113 @@ def log_exception(logger: logging.Logger, error: Exception, context: Optional[Di
 
 
 def with_trace_id(func):
-    """装饰器：为函数调用自动注入 trace_id"""
+    """装饰器：为函数调用自动注入 trace_id（Phase 5.4 用 token-based reset）"""
     @wraps(func)
     def wrapper(*args, **kwargs):
         trace_id = kwargs.pop('trace_id', None)
-        if trace_id:
-            TraceContext.set_trace_id(trace_id)
+        token = TraceContext.set_trace_id(trace_id) if trace_id else None
         try:
             return func(*args, **kwargs)
         finally:
-            if trace_id:
-                TraceContext.clear()
+            if token is not None:
+                TraceContext.reset(token)
     return wrapper
 
 
-# 默认日志配置
 def configure_default_logging():
-    """配置默认日志系统"""
-    # 根日志级别
-    root_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    logging.basicConfig(
-        level=getattr(logging, root_level, logging.INFO),
-        format='%(asctime)s | %(trace_id)s | %(levelname)-8s | %(name)s | %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(str(LOG_FILE), encoding='utf-8')
-        ]
+    """配置默认日志系统（启动时调用一次）"""
+    # 配置根日志器
+    root_logger = logging.getLogger()
+    root_logger.setLevel(_get_log_level())
+
+    # 清除已有的 handlers
+    for h in root_logger.handlers[:]:
+        root_logger.removeHandler(h)
+
+    # 控制台（生产环境可关闭）
+    if os.getenv("LOG_CONSOLE", "true").lower() != "false":
+        console = logging.StreamHandler(sys.stdout)
+        console.setLevel(_get_log_level())
+        console.setFormatter(ConsoleFormatter())
+        root_logger.addHandler(console)
+
+    # 全局错误日志文件
+    error_handler = TimedRotatingFileHandler(
+        filename=str(LOG_FILES["error"]),
+        when="midnight",
+        interval=1,
+        backupCount=30,
+        encoding="utf-8"
     )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(JsonFormatter())
+    root_logger.addHandler(error_handler)
+
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 
 
-# 导出便捷函数
+# 便捷函数
 def get_logger_for_module(module_name: str) -> logging.Logger:
     """为模块获取日志记录器，模块名使用点分隔路径"""
     return get_logger(module_name)
+
+
+# 日志查询工具函数
+def search_logs(
+    keyword: str,
+    log_file: str = "api.log",
+    level: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    limit: int = 100
+) -> List[Dict[str, Any]]:
+    """
+    查询日志（用于调试）
+
+    Args:
+        keyword: 搜索关键词
+        log_file: 日志文件名
+        level: 过滤日志级别
+        trace_id: 过滤trace_id
+        limit: 返回条数限制
+
+    Returns:
+        匹配的日志条目列表
+    """
+    import json
+
+    results = []
+    log_path = LOG_DIR / log_file
+
+    if not log_path.exists():
+        return results
+
+    with open(log_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            # 关键词过滤
+            if keyword and keyword.lower() not in entry.get("message", "").lower():
+                continue
+
+            # 级别过滤
+            if level and entry.get("level") != level.upper():
+                continue
+
+            # trace_id过滤
+            if trace_id and entry.get("trace_id") != trace_id:
+                continue
+
+            results.append(entry)
+
+            if len(results) >= limit:
+                break
+
+    return results

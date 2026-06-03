@@ -14,7 +14,24 @@
       "Bash(npm run *)",
       "Bash(node *)",
       "Bash(xxd)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(git reflog *)",
+      "Bash(git gc *)",
+      "Bash(git count-objects *)",
+      "Bash(git rev-list *)",
+      "Bash(git cat-file *)",
+      "Bash(awk '{printf \"%.2f MB %s\\\\n\", $1/1024/1024, substr\\($0,index\\($0,$2\\)\\)}')",
+      "Bash(git verify-pack *)",
+      "Bash(sort -k3 -rn)",
+      "Bash(awk '{print $1}')",
+      "Bash(git fsck *)",
+      "Bash(awk '{printf \"%.2f MB: %s\\\\n\", $3/1024/1024, $0}')",
+      "Bash(git ls-tree *)",
+      "Bash(awk '{sum+=$1} END {printf \"%.2f MB\\\\n\", sum/1024/1024}')",
+      "Bash(git show-ref *)",
+      "Bash(git update-ref *)",
+      "Bash(find .git/refs/original -type f)",
+      "Bash(rm -rf .git/refs/original)"
     ]
   }
 }

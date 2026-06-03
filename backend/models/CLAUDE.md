@@ -55,3 +55,10 @@ for db in get_db():
     # 使用会话
     pass
 ```
+
+## 密码哈希
+
+- 算法：PBKDF2-HMAC-SHA256
+- 迭代次数：`PBKDF2_ITERATIONS = 600_000`（OWASP 2023 推荐，原 100k 已升级）
+- 存储格式：`pbkdf2_sha256$600000$<salt_hex>$<hash_hex>`（自描述含迭代次数）
+- **透明迁移**：`verify_password` 兼容旧 `salt$hash` 100k 格式。注册端应在旧 hash 验证成功后写回新 hash（`User.hash_password(password)` + `db.commit()`）

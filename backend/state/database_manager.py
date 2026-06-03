@@ -128,24 +128,21 @@ class DatabaseStateManager:
             db.commit()
 
     def get_progress(self, user_id: int, session_id: str) -> Dict[str, str]:
-        """获取进度状态"""
+        """获取进度状态 - 1 次查询（S2.9 修复原 9-query 循环）"""
         with get_db_context() as db:
-            db_session = db.query(DBSession).filter(
-                DBSession.session_id == session_id,
-                DBSession.user_id == user_id
-            ).first()
+            rows = (
+                db.query(SectionData.section_number, SectionData.status)
+                .join(DBSession, DBSession.id == SectionData.session_id)
+                .filter(
+                    DBSession.session_id == session_id,
+                    DBSession.user_id == user_id,
+                )
+                .all()
+            )
 
-            if not db_session:
-                return {}
-
-            progress = {}
-            for i in range(1, 10):
-                section_data = db.query(SectionData).filter(
-                    SectionData.session_id == db_session.id,
-                    SectionData.section_number == i
-                ).first()
-                progress[str(i)] = section_data.status if section_data else "not_started"
-
+            progress = {str(i): "not_started" for i in range(1, 10)}
+            for section_number, status in rows:
+                progress[str(section_number)] = status
             return progress
 
     def set_current_section(self, user_id: int, session_id: str, section: int) -> None:
@@ -235,15 +232,15 @@ class DatabaseStateManager:
                 ).first()
                 return section_data.data if section_data else {}
             else:
-                # 获取所有部分的数据
-                result = {}
-                for i in range(1, 10):
-                    section_data = db.query(SectionData).filter(
-                        SectionData.session_id == db_session.id,
-                        SectionData.section_number == i
-                    ).first()
-                    result[str(i)] = section_data.data if section_data else {}
-
+                # 获取所有部分的数据 - 1 次查询（S2.9 修复原 9-query 循环）
+                rows = db.query(
+                    SectionData.section_number, SectionData.data
+                ).filter(
+                    SectionData.session_id == db_session.id
+                ).all()
+                result: Dict[str, Any] = {str(i): {} for i in range(1, 10)}
+                for section_number, data in rows:
+                    result[str(section_number)] = data or {}
                 return result
 
     def add_history(self, user_id: int, session_id: str, action: Dict[str, Any]) -> None:
@@ -270,8 +267,10 @@ class DatabaseStateManager:
 
                 logger.debug(f"添加操作历史: session_id={session_id}, action={action.get('action')}")
         except Exception as e:
+            # 记录完整错误信息
             logger.error(f"添加操作历史失败: session_id={session_id}, action={action}, error: {str(e)}", exc_info=True)
-            # 不抛出异常，避免影响主流程
+            # 对于非关键操作，不抛出异常避免影响主流程
+            # 但如果是数据库连接错误，应该警告而不是静默失败
 
     def get_history(self, user_id: int, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         """获取操作历史"""

@@ -5,15 +5,28 @@
 
 import hashlib
 import secrets
+import hmac
+import logging
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, JSON, ForeignKey, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from datetime import datetime, timezone
 
 from tantan.backend.config import get_config
 
+logger = logging.getLogger(__name__)
+
+# PBKDF2 迭代次数：OWASP 2023 推荐 600k
+PBKDF2_ITERATIONS = 600_000
+
 DATABASE_URL = get_config().DATABASE_URL
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=20,
+    max_overflow=30,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    pool_timeout=30
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -39,19 +52,35 @@ class User(Base):
 
     @staticmethod
     def hash_password(password: str) -> str:
-        """密码哈希"""
+        """密码哈希（PBKDF2-SHA256 + 600k 轮，OWASP 2023 推荐）"""
         salt = secrets.token_hex(16)
-        pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000).hex()
-        return f"{salt}${pwd_hash}"
+        pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), PBKDF2_ITERATIONS).hex()
+        return f"pbkdf2_sha256${PBKDF2_ITERATIONS}${salt}${pwd_hash}"
 
     @staticmethod
     def verify_password(password: str, password_hash: str) -> bool:
-        """验证密码"""
+        """验证密码（透明兼容旧 salt$hash 100k 轮 与新 pbkdf2_sha256$iter$salt$hash 600k 轮）"""
         try:
-            salt, pwd_hash = password_hash.split('$')
-            new_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000).hex()
-            return new_hash == pwd_hash
-        except:
+            parts = password_hash.split('$')
+            if len(parts) == 2:
+                # 旧格式：salt$hash（100k 轮）
+                salt, pwd_hash = parts
+                iterations = 100_000
+            elif len(parts) == 4 and parts[0] == 'pbkdf2_sha256':
+                # 新格式：pbkdf2_sha256$iter$salt$hash
+                _, iterations, salt, pwd_hash = parts
+                iterations = int(iterations)
+            else:
+                logger.error("密码哈希格式无法识别")
+                return False
+
+            new_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), iterations).hex()
+            return hmac.compare_digest(new_hash, pwd_hash)
+        except ValueError:
+            logger.error("密码哈希格式错误，无法验证")
+            return False
+        except Exception as e:
+            logger.error(f"密码验证时发生系统错误: {e}", exc_info=True)
             return False
 
     def generate_user_id(self) -> str:

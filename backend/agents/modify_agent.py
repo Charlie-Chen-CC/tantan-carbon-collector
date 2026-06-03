@@ -40,7 +40,7 @@ class ModifyAgent:
     """修改Agent"""
 
     def __init__(self):
-        self.modify_history: List[Dict[str, Any]] = []
+        pass
 
     def validate_modify_request(self, request: ModifyRequest) -> Dict[str, Any]:
         """验证修改请求"""
@@ -88,7 +88,7 @@ class ModifyAgent:
                     "error": f"旧值不匹配，当前值为: {current_data.get(field)}"
                 }
 
-            # 记录修改历史
+            # 记录修改详情（仅供响应体使用，不持久化）
             modify_record = {
                 "request_id": request.request_id,
                 "section": request.section,
@@ -99,7 +99,6 @@ class ModifyAgent:
                 "timestamp": request.timestamp.isoformat(),
                 "status": "completed"
             }
-            self.modify_history.append(modify_record)
 
             logger.info(f"修改请求处理成功: field={field}, section={section}")
             return {
@@ -140,33 +139,6 @@ class ModifyAgent:
             "success_count": success_count,
             "failure_count": failure_count,
             "results": results
-        }
-
-    def get_modify_history(self, section: Optional[int] = None) -> List[Dict[str, Any]]:
-        """获取修改历史"""
-        if section is None:
-            return self.modify_history
-
-        return [record for record in self.modify_history if record["section"] == section]
-
-    def rollback(self, request_id: str) -> Dict[str, Any]:
-        """回滚修改"""
-        for i, record in enumerate(self.modify_history):
-            if record["request_id"] == request_id:
-                # 执行回滚
-                self.modify_history[i]["status"] = "rolled_back"
-                self.modify_history[i]["rollback_timestamp"] = datetime.now().isoformat()
-
-                return {
-                    "success": True,
-                    "request_id": request_id,
-                    "rolled_back_to": record["old_value"],
-                    "message": f"成功回滚修改 '{record['field']}'"
-                }
-
-        return {
-            "success": False,
-            "error": f"未找到修改请求: {request_id}"
         }
 
 

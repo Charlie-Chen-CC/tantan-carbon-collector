@@ -1,0 +1,55 @@
+# 通用排除
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+*.log
+*.tmp
+*.swp
+*.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 虚拟环境
+**/.venv/
+**/venv/
+**/env/
+
+# 前端
+tantan/frontend/node_modules/
+tantan/frontend/.next/
+tantan/frontend/out/
+tantan/frontend/build/
+tantan/frontend/.env*.local
+
+# 后端运行产物
+tantan/backend/logs/
+tantan/backend/uploads/
+tantan/backend/.env
+!tantan/backend/.env.example
+
+# 测试
+tantan/backend/tests/
+tantan/frontend/e2e/
+tantan/frontend/playwright-report/
+tantan/frontend/test-results/
+
+# 文档
+docs/
+
+# 自身
+Dockerfile*
+docker-compose*.yml
+.dockerignore

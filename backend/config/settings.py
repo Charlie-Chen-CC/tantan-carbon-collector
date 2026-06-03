@@ -41,6 +41,14 @@ class Config:
     LLM_TEMPERATURE: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     LLM_MAX_TOKENS: int = int(os.getenv("LLM_MAX_TOKENS", "2000"))
 
+    # 安全配置
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")  # production 需显式设置
+    REQUIRE_NON_DEFAULT_CREDENTIALS: bool = os.getenv("REQUIRE_NON_DEFAULT_CREDENTIALS", "true").lower() == "true"
+
+    # 认证 Cookie 配置
+    COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"  # 生产 True, dev False
+    COOKIE_SAMESITE: str = os.getenv("COOKIE_SAMESITE", "strict")
+
     @classmethod
     def validate(cls) -> bool:
         """验证配置是否完整"""

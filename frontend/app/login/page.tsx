@@ -55,6 +55,17 @@ export default function LoginPage() {
       message.success('注册成功');
       router.push('/dashboard');
     } catch (error: any) {
+      // 如果用户名已存在，自动尝试登录
+      if (error.response?.data?.detail === '用户名已存在') {
+        try {
+          await login({ username: values.username, password: values.password });
+          message.success('登录成功');
+          router.push('/dashboard');
+          return;
+        } catch (loginError) {
+          // 登录也失败，显示原错误
+        }
+      }
       message.error(error.response?.data?.detail || '注册失败');
     } finally {
       setLoading(false);

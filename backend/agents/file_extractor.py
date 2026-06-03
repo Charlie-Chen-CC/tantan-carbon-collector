@@ -176,130 +176,231 @@ class TextExtractor:
 
 # ============== Section 专精提示词 ==============
 
-SECTION_PROMPTS = {
-    1: """你是一个碳排放数据填写助手，专门从文档中提取【基本信息】部分的数据。
+from tantan.backend.agents.section_options import (
+    INDUSTRY_STANDARD_REF,
+    INDUSTRY_EXAMPLES,
+    PRODUCT_UNITS,
+    PRODUCT_OTHER_MAX,
+    COMMON_FUEL_TYPES,
+    MEASURABLE_OPTIONS,
+    PHOTOVOLTAIC_CONFIG_OPTIONS,
+    GREEN_CERTIFICATE_OPTIONS,
+    EMISSION_RIGHTS_OPTIONS,
+    COMMON_REFRIGERANTS,
+    FIRE_EXTINGUISHER_TYPES,
+    WASTE_DISPOSAL_METHODS,
+    TRANSPORT_MODES,
+    STATISTICAL_CALIBER_OPTIONS,
+)
+
+
+def _join_or(options: list[str]) -> str:
+    """把选项列表拼成"a/b/c"格式"""
+    return "、".join(options)
+
+
+def _build_section_prompts() -> dict[int, str]:
+    """构建 9 个 Section 的 LLM 提示词（Phase 6.1 反硬编码）
+
+    所有选项枚举引用 `section_options.py`（后续 Phase 6.2 会迁到 `shared/field_schema.json` + codegen 注入）。
+    提示词字符串里不再出现"燃料类型包括：天然气、液化石油气、煤、柴油、汽油"
+    这类硬编码列表，统一改为"请参照 {OPTIONS} 理解业务背景，但不应限制 LLM 自行识别其他合理取值"。
+    """
+    return {
+        1: f"""你是一个碳排放数据填写助手，专门从【碳盘查企业碳排放核算报告】或【数据收集表】中提取【基本信息】部分的数据。
+
+【业务背景说明】
+- 基本信息是企业进行碳排放核算的基础
+- 企业名称通常是公司全称，如"浙江光华科技股份有限公司"
+- 所属行业按{INDUSTRY_STANDARD_REF}填写
+- 核算年份指碳排放核算的时间范围，一般为一年（1月1日至12月31日）
+
+【字段示例（仅供理解，**不**是穷举）】
+- 所属行业示例：{_join_or(INDUSTRY_EXAMPLES)}（不同企业可能涉及其他行业分类）
 
 需要提取的字段：
-- 企业名称
-- 所属行业
-- 联系人
-- 联系方式
-- 生产地址
-- 核算年份
-- 核算周期说明（如开始日期、结束日期）
+- 企业名称（公司全称）
+- 所属行业（按{INDUSTRY_STANDARD_REF}填写）
+- 联系人（负责碳排放核算的人员姓名）
+- 联系方式（电话或邮箱）
+- 生产地址（实际生产场所地址）
+- 核算年份（一般为4位数字年份，如2023、2024）
+- 核算周期说明（起止日期，如2023.1.1~2023.12.31 或 2024年1月1日至2024年12月31日）
 
 请从提供的原始文本中提取上述字段，以JSON格式返回。字段名为key，值为字符串，如果某字段不存在则返回null。
 只返回JSON，不要有其他解释。""",
 
-    2: """你是一个碳排放数据填写助手，专门从文档中提取【产品】部分的数据。
+        2: f"""你是一个碳排放数据填写助手，专门从【碳盘查企业碳排放核算报告】或【数据收集表】中提取【产品】部分的数据。
+
+【业务背景说明】
+- PCF (Product Carbon Footprint) 指产品碳足迹
+- 核算目标产品是企业进行碳排放核算的主要对象
+- 计量单位决定如何量化产品，常见计量单位有：{_join_or(PRODUCT_UNITS)}
+- 如果工厂生产多种产品，需要说明是否有副产品产出
 
 需要提取的字段：
-- PCF核算目标产品名称
-- 是否为生产工厂唯一产品
-- 其他产品1-5 名称
-- 其他产品超过5种的说明
+- PCF核算目标产品名称（企业主要产品的名称）
+- 是否为生产工厂唯一产品（值：是 / 否）
+- 其他产品1名称、其他产品2名称...其他产品{PRODUCT_OTHER_MAX}名称（如果不止一种产品）
+- 其他产品超过{PRODUCT_OTHER_MAX}种的说明（如超过请说明数量）
 - 计量单位
-- 目标产品产线内是否有副产品
-- 副产品1-5 名称
-- 副产品超过5种的说明
+- 目标产品产线内是否有副产品（值：是 / 否）
+- 副产品1名称、副产品2名称...副产品{PRODUCT_OTHER_MAX}名称
+- 副产品超过{PRODUCT_OTHER_MAX}种的说明
 
 请从提供的原始文本中提取上述字段，以JSON格式返回。只返回JSON。""",
 
-    3: """你是一个碳排放数据填写助手，专门从文档中提取【燃料使用】部分的数据。
+        3: f"""你是一个碳排放数据填写助手，专门从【能源消耗台账】或【碳盘查报告】中提取【燃料使用】部分的数据。
+
+【业务背景说明】
+- 燃料使用碳排放是企业碳排放的主要来源之一
+- 常见燃料类型有：{_join_or(COMMON_FUEL_TYPES)} 等（**不**是穷举；不同企业可能用生物质成型燃料、煤层气等）
+- 生产用锅炉是企业最常见的耗能设备
+- 厂内转运车辆（叉车）通常使用柴油或电力
+- 商务车和道路车辆燃料指企业自有车辆的用油量
+
+需要提取的字段（每个燃料字段包含：燃料类型、核算周期内使用量、单位、热值、热值单位）：
+- 生产用锅炉燃料：{{燃料类型, 使用量, 单位, 实测热值, 热值单位}}
+- 专用废气焚烧炉燃料：{{燃料类型, 使用量, 单位}}
+- 危废焚烧炉燃料：{{燃料类型, 使用量, 单位}}
+- 发电机燃料：{{燃料类型, 使用量, 单位}}
+- 食堂炉灶燃料：{{燃料类型, 使用量, 单位}}
+- 厂内转运叉车燃料：{{燃料类型, 使用量, 单位}}
+- 自有商务车92#：{{燃料类型}}
+- 自有商务车95#：{{燃料类型}}
+- 自有商务车98#：{{燃料类型}}
+- 自有道路车辆燃料-柴油：{{燃料类型}}
+- 切割、焊接燃料：{{燃料类型}}
+
+请从提供的原始文本中提取上述字段，转换为JSON格式返回。每个燃料字段返回一个对象，包含上述属性。
+只返回JSON，不要有其他解释。""",
+
+        4: f"""你是一个碳排放数据填写助手，专门从【电力消耗台账】或【能源统计表】中提取【电力、热力使用】部分的数据。
+
+【业务背景说明】
+- 外购电力是企业碳排放的重要来源（Scope 2）
+- 如果企业有光伏发电设施，可以抵扣部分碳排放
+- 绿证（绿色电力证书）购买后可抵扣碳排放
+- 蒸汽可能为外购或自产，用于生产工艺
+
+【重要】每个字段必须单独返回，不要合并！
 
 需要提取的字段：
-- 生产用锅炉燃料（类型和用量）
-- 专用废气焚烧炉燃料
-- 危废焚烧炉燃料
-- 发电机燃料
-- 食堂炉灶燃料
-- 厂内转运叉车燃料
-- 自有商务车92#/95#/98#燃料
-- 自有道路车辆燃料-柴油
-- 切割、焊接燃料
+- 全厂用电（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 生产用电（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 行政办公用电（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 目标产品产线用电（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 单耗用电（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 光伏发电量（数字，单位kWh或MWh）
+- 光伏发电配置（参考值：{_join_or(PHOTOVOLTAIC_CONFIG_OPTIONS)}）
+- 是否购买绿证（参考值：{_join_or(GREEN_CERTIFICATE_OPTIONS)}）
+- 是否购买排放权益（参考值：{_join_or(EMISSION_RIGHTS_OPTIONS)}）
+- 蒸汽温度（数字，单位℃）
+- 蒸汽压力（数字，单位MPa）
+- 全厂用蒸汽（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 生产用蒸汽（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 行政类用蒸汽（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 目标产品产线用蒸汽（值：{_join_or(MEASURABLE_OPTIONS)}）
+- 单耗用蒸汽（值：{_join_or(MEASURABLE_OPTIONS)}）
 
 请从提供的原始文本中提取上述字段，以JSON格式返回。只返回JSON。""",
 
-    4: """你是一个碳排放数据填写助手，专门从文档中提取【电力、热力使用】部分的数据。
+        5: f"""你是一个碳排放数据填写助手，专门从【设备清单】或【制冷剂采购发票】中提取【制冷剂使用】部分的数据。
+
+【业务背景说明】
+- 制冷剂泄漏是HFC、PFC等强效温室气体的排放源
+- 空调和冷冻机是常见的制冷剂使用设备
+- 常见制冷剂标号：{_join_or(COMMON_REFRIGERANTS)} 等（**不**是穷举）
+- 填充量通常以kg为单位
 
 需要提取的字段：
-- 全厂用电/生产用电/行政办公用电/目标产品产线用电/单耗用电（统计情况）
-- 光伏发电量
-- 光伏发电配置
-- 是否购买绿证
-- 是否购买排放权益
-- 蒸汽温度/蒸汽压力
-- 全厂用蒸汽/生产用蒸汽/行政类用蒸汽/目标产品产线用蒸汽/单耗用蒸汽
+- 空调制冷剂：数组，包含设备名称、标号、填充量
+  例如：[(设备名称: "办公楼1号空调", 标号: "R410A", 填充量: "15.5"), ...]
+- 冷冻机制冷剂：数组，包含设备名称、标号、填充量
+  例如：[(设备名称: "冷库冷冻机1", 标号: "R22", 填充量: "50"), ...]
+
+请从提供的原始文本中提取上述字段，以JSON格式返回。
+只返回JSON，不要有其他解释。""",
+
+        6: f"""你是一个碳排放数据填写助手，专门从【HR人事系统】或【生产报表】中提取【其他散逸类排放】部分的数据。
+
+【业务背景说明】
+- CO2灭火器填充属于逸散性排放，填充量即排放量
+- 员工工时用于计算焊接、切割等作业的碳排放
+- 常见需统计的灭火器类型：{_join_or(FIRE_EXTINGUISHER_TYPES)}（**不**是穷举）
+
+需要提取的字段：
+- CO2灭火器填充总量(kg)（灭火器维修填充的CO2重量）
+- 核算期内员工总工时(h)（所有员工在核算期内的总工作时间）
 
 请从提供的原始文本中提取上述字段，以JSON格式返回。只返回JSON。""",
 
-    5: """你是一个碳排放数据填写助手，专门从文档中提取【制冷剂使用】部分的数据。
+        7: f"""你是一个碳排放数据填写助手，专门从【环保设施运行记录】或【废物处理合同】中提取【三废处理】部分的数据。
 
-需要提取的字段：
-- 空调制冷剂1-5：标号、填充量(kg)
-- 冷冻机制冷剂1-5：标号、填充量(kg)
-
-请从提供的原始文本中提取上述字段，以JSON格式返回，格式如：
-{"空调制冷剂1标号": "R410A", "空调制冷剂1填充量": "10.5", ...}
-只返回JSON。""",
-
-    6: """你是一个碳排放数据填写助手，专门从文档中提取【其他散逸类排放】部分的数据。
-
-需要提取的字段：
-- CO2灭火器填充总量(kg)
-- 核算期内员工总工时(h)
-
-请从提供的原始文本中提取上述字段，以JSON格式返回。只返回JSON。""",
-
-    7: """你是一个碳排放数据填写助手，专门从文档中提取【三废处理】部分的数据。
+【业务背景说明】
+- 废水处理方式影响废水排放的碳排放因子
+- 危废处理常见方式：{_join_or(WASTE_DISPOSAL_METHODS)}（**不**是穷举）
+- 污水处理会产生甲烷等温室气体
 
 需要提取的字段：
 - 废水处理方式
-- 废水处理量
-- 目标产品产线废水
-- COD浓度
-- 污水处理药剂1-3
+- 废水处理量（数字，单位t或m3）
+- 目标产品产线废水（数字）
+- COD浓度（数字，单位mg/L）
+- 污水处理药剂1（如果使用）
+- 污水处理药剂2（如果使用）
+- 污水处理药剂3（如果使用）
 - 废气处理方式
-- 危废委外焚烧/自行焚烧/委外资源化/自行资源化：总量、目标产品产线分解
-- 烟气处理药剂1-4
+- 危废委外焚烧总量（数字）
+- 危废委外焚烧目标产品产线分解（数字）
+- 危废自行焚烧总量（数字）
+- 危废自行焚烧目标产品产线分解（数字）
+- 危废委外资源化总量（数字）
+- 危废委外资源化目标产品产线分解（数字）
+- 危废自行资源化总量（数字）
+- 危废自行资源化目标产品产线分解（数字）
+- 烟气处理药剂1（如果使用）
+- 烟气处理药剂2（如果使用）
+- 烟气处理药剂3（如果使用）
+- 烟气处理药剂4（如果使用）
 
 请从提供的原始文本中提取上述字段，以JSON格式返回。只返回JSON。""",
 
-    8: """你是一个碳排放数据填写助手，专门从文档中提取【原材料使用】部分的数据。
+        8: f"""你是一个碳排放数据填写助手，专门从【原材料采购清单】或【工艺设计文件】中提取【原材料使用】部分的数据。
+
+【业务背景说明】
+- 原材料使用是产品碳足迹的主要贡献者（Scope 3）
+- 需要记录所有主要原材料的名称和用量
+- 供应商信息用于供应链碳排放核算
+- 工艺流程图描述产品生产的完整过程
+- 常见运输方式参考：{_join_or(TRANSPORT_MODES)}（**不**是穷举）
 
 需要提取的字段：
 - PCF核算目标产品生产工艺流程文字描述
-- 原材料1-10：名称、使用量
-- 供应商A-L 信息
+- 原材料：数组，包含名称、规格、使用量、单位
+  例如：[(名称: "硫酸", 规格: "98%", 使用量: "100", 单位: "t"), ...]
+- 供应商：数组，包含名称、采购的原材料品类、运输方式、运距
+  例如：[(名称: "供应商A", 品类: "硫酸", 运输方式: "公路运输", 运距: "200"), ...]
 
-【重要-工艺流程图识别规则】
-1. 用户可能上传了工艺流程图，请仔细识别
-2. 只有当图片明确展示生产工艺流程时（如有箭头指示的工艺步骤、明确的工序名称）才描述
-3. 工艺流程图特征：
-   - 有箭头连接各个工序
-   - 有明确的工艺步骤名称（如"原料准备"、"混合"、"成型"、"烧结"等）
-   - 通常有多个步骤框和连接线
-4. 非工艺流程图示例（请明确识别）：
-   - 设备照片（如窑炉外观、设备铭牌）
-   - 工厂外景图、车间场景照
-   - 组织架构图
-   - 简单的示意草图（非工艺流程）
-5. 如果没有找到工艺流程图，请明确返回 "工艺流程图": null
-6. 宁可返回null也不要错误描述
+请从提供的原始文本和图片中提取上述字段，以JSON格式返回。
+只返回JSON，不要有其他解释。""",
 
-【重要-宁可空不要错】
-当不确定图片是否为工艺流程图时，回复null而非错误描述。
+        9: f"""你是一个碳排放数据填写助手，专门从【能源统计表】或【水务账单】中提取【生产耗材】部分的数据。
 
-请从提供的原始文本和图片中提取上述字段，以JSON格式返回。只返回JSON。""",
-
-    9: """你是一个碳排放数据填写助手，专门从文档中提取【生产耗材】部分的数据。
+【业务背景说明】
+- 新鲜水消耗是产品碳足迹的一部分
+- 氮气常用于化工生产的吹扫和保护
+- 统计口径参考：{_join_or(STATISTICAL_CALIBER_OPTIONS)}（**不**是穷举）
 
 需要提取的字段：
-- 新鲜水：统计口径、使用量、单位
+- 新鲜水：统计口径（参考值：{_join_or(STATISTICAL_CALIBER_OPTIONS)}）、使用量、单位（t或m3）
 - 氮气：统计口径、使用量、单位
 
 请从提供的原始文本中提取上述字段，以JSON格式返回。只返回JSON。""",
-}
+    }
+
+
+SECTION_PROMPTS = _build_section_prompts()
 
 
 class LLMExtractor:
@@ -332,8 +433,11 @@ class LLMExtractor:
 
             if isinstance(result, dict) and result.get("content"):
                 answer = result["content"]
+                logger.info(f"LLM原始输出 section={self.section}: {answer[:500]}")
                 # 尝试解析 JSON
-                return self._parse_json(answer)
+                parsed = self._parse_json(answer)
+                logger.info(f"LLM解析结果 section={self.section}: {parsed}")
+                return parsed
         except Exception as e:
             logger.error(f"LLM提取失败 section={self.section}: {e}")
 
@@ -378,127 +482,76 @@ class LLMExtractor:
         """从 LLM 输出中解析 JSON"""
         import re
         import json
-        # 找 JSON 块
-        match = re.search(r'\{[^{}]*\}', text, re.DOTALL)
-        if not match:
-            return {}
+
+        # 尝试多种方式解析 JSON
+        # 方式1：尝试直接解析整个文本（如果它是纯 JSON）
+        text = text.strip()
         try:
-            return json.loads(match.group())
+            return json.loads(text)
         except json.JSONDecodeError:
-            return {}
-class BaseExtractor:
-    """文件提取Agent基类"""
+            pass
 
-    def __init__(self, section: int):
-        self.section = section
-        self.section_ranges = {
-            1: (2, 9),    # 基本信息
-            2: (10, 27),  # 产品
-            3: (28, 41),  # 燃料使用
-            4: (42, 59),  # 电力、热力使用
-            5: (60, 72),  # 制冷剂使用
-            6: (73, 76),  # 其他散逸类排放
-            7: (77, 102), # 三废处理
-            8: (103, 129),# 原材料使用
-            9: (130, 133),# 生产耗材
-        }
+        # 方式2：尝试匹配 JSON 对象（支持嵌套大括号）
+        # 找到第一个 { 和最后一个 } 之间的内容
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            json_str = text[start:end+1]
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                pass
 
-    def parse_excel(self, file_content: bytes) -> Optional[openpyxl.worksheet.worksheet.Worksheet]:
-        """解析Excel文件，返回数据收集表工作表"""
-        try:
-            wb = openpyxl.load_workbook(BytesIO(file_content))
-            ws = wb["数据收集表"]
-            return ws
-        except Exception as e:
-            logger.error(f"Excel解析错误: section={self.section}, error: {str(e)}", exc_info=True)
-            return None
+        # 方式3：尝试匹配数组格式的 JSON
+        arr_start = text.find('[')
+        arr_end = text.rfind(']')
+        if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
+            json_str = text[arr_start:arr_end+1]
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                pass
 
-    def extract_section_data(self, worksheet, section: int) -> Dict[str, Any]:
-        """从工作表中提取指定部分的数据"""
-        if section not in self.section_ranges:
-            return {}
-
-        start_row, end_row = self.section_ranges[section]
-        data = {}
-
-        for row in range(start_row, end_row + 1):
-            cell_a = worksheet.cell(row=row, column=1).value
-            cell_b = worksheet.cell(row=row, column=2).value
-
-            if cell_a:
-                field_name = str(cell_a).strip()
-                data[field_name] = cell_b
-
-        return data
-
-    def process_file(self, file_content: bytes) -> Dict[str, Any]:
-        """处理文件并提取数据"""
-        worksheet = self.parse_excel(file_content)
-        if not worksheet:
-            return {"error": "无法解析Excel文件"}
-
-        extracted_data = self.extract_section_data(worksheet, self.section)
-        validated_data = self.validate_data(extracted_data)
-
-        return {
-            "msg_id": str(uuid.uuid4()),
-            "section": self.section,
-            "data": validated_data,
-            "timestamp": datetime.now().isoformat(),
-            "status": "completed" if validated_data else "failed"
-        }
-
-    def validate_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """验证和清理数据"""
-        validated = {}
-        for key, value in data.items():
-            if value is not None and str(value).strip():
-                validated[key] = str(value).strip()
-        return validated
-
+        logger.warning(f"无法解析 LLM 输出为 JSON: {text[:200]}")
+        return {}
 
 class FileExtractAgent:
-    """文件提取Agent - 支持多格式文件 + LLM专精提取"""
+    """文件提取 Agent - 组合 TextExtractor 和 LLMExtractor。
+
+    Phase 0: 添加此缺失类以解除 import 阻塞。
+    接口: FileExtractAgent(section).process(content, filename=...) -> dict
+    """
+
+    SUPPORTED_EXTENSIONS = {
+        '.xlsx', '.xls', '.pdf', '.docx', '.doc', '.pptx', '.md',
+        '.png', '.jpg', '.jpeg',
+    }
 
     def __init__(self, section: int):
         self.section = section
-        self.llm_extractor = LLMExtractor(section)
 
-    def process(self, file_content: bytes, filename: str = "unknown") -> Dict[str, Any]:
-        """处理文件提取：通用文本提取 + LLM专精字段提取"""
-        # 1. 从任意格式提取原始文本
+    def process(self, content: bytes, filename: str = "") -> Dict[str, Any]:
+        """从文件字节内容中提取对应 section 的数据。"""
+        ext = os.path.splitext(filename)[1].lower() if filename else ''
+        if ext not in self.SUPPORTED_EXTENSIONS:
+            return {
+                "status": "failed",
+                "error": f"不支持的文件类型: {ext or '(无)'}",
+                "data": {},
+            }
         try:
-            raw_text = TextExtractor.extract_from_bytes(file_content, filename)
-        except ValueError as e:
-            return {
-                "msg_id": str(uuid.uuid4()),
-                "section": self.section,
-                "data": {},
-                "error": str(e),
-                "timestamp": datetime.now().isoformat(),
-                "status": "failed"
-            }
-
-        if not raw_text.strip():
-            return {
-                "msg_id": str(uuid.uuid4()),
-                "section": self.section,
-                "data": {},
-                "error": "未能从文件中提取到文本内容",
-                "timestamp": datetime.now().isoformat(),
-                "status": "failed"
-            }
-
-        # 2. 用专精LLM提取结构化数据
-        extracted_data = self.llm_extractor.extract(raw_text)
-
-        return {
-            "msg_id": str(uuid.uuid4()),
-            "section": self.section,
-            "data": extracted_data,
-            "timestamp": datetime.now().isoformat(),
-            "status": "completed" if extracted_data else "partial"
-        }
+            text = TextExtractor.extract_from_bytes(content, filename)
+        except Exception as e:
+            logger.error(f"文本提取失败: filename={filename}, error: {e}", exc_info=True)
+            return {"status": "failed", "error": f"文本提取失败: {e}", "data": {}}
+        if not text:
+            return {"status": "failed", "error": "文件内容为空", "data": {}}
+        try:
+            data = LLMExtractor(self.section).extract(text)
+        except Exception as e:
+            logger.error(f"LLM 提取失败: section={self.section}, error: {e}", exc_info=True)
+            return {"status": "failed", "error": f"AI 提取失败: {e}", "data": {}}
+        return {"status": "completed", "data": data, "error": None}
 
 
 class ExtractorsFactory:
@@ -515,183 +568,3 @@ class ExtractorsFactory:
         return {i: FileExtractAgent(i) for i in range(1, 10)}
 
 
-def extract_section_1(worksheet) -> Dict[str, Any]:
-    """提取基本信息部分"""
-    data = {}
-    # 企业名称
-    data["企业名称"] = worksheet.cell(row=3, column=2).value
-    # 所属行业
-    data["所属行业"] = worksheet.cell(row=4, column=2).value
-    # 联系人
-    data["联系人"] = worksheet.cell(row=5, column=2).value
-    # 联系方式
-    data["联系方式"] = worksheet.cell(row=6, column=2).value
-    # 生产地址
-    data["生产地址"] = worksheet.cell(row=7, column=2).value
-    # 核算年份
-    data["核算年份"] = worksheet.cell(row=8, column=2).value
-    # 核算周期说明
-    data["核算周期说明"] = worksheet.cell(row=9, column=2).value
-    return data
-
-
-def extract_section_2(worksheet) -> Dict[str, Any]:
-    """提取产品部分"""
-    data = {}
-    # PCF核算目标产品名称
-    data["PCF核算目标产品名称"] = worksheet.cell(row=12, column=2).value
-    # 是否为生产工厂唯一产品
-    data["是否为生产工厂唯一产品"] = worksheet.cell(row=13, column=2).value
-    # 其他产品1-5
-    for i in range(1, 6):
-        data[f"其他产品{i}名称"] = worksheet.cell(row=13 + i, column=2).value
-    # 其他产品超过5种的说明
-    data["其他产品超过5种的说明"] = worksheet.cell(row=19, column=2).value
-    # 计量单位
-    data["计量单位"] = worksheet.cell(row=20, column=2).value
-    # 目标产品产线内是否有副产品
-    data["目标产品产线内是否有副产品"] = worksheet.cell(row=21, column=2).value
-    # 副产品1-5
-    for i in range(1, 6):
-        data[f"副产品{i}名称"] = worksheet.cell(row=21 + i, column=2).value
-    # 副产品超过5种的说明
-    data["副产品超过5种的说明"] = worksheet.cell(row=27, column=2).value
-    return data
-
-
-def extract_section_3(worksheet) -> Dict[str, Any]:
-    """提取燃料使用部分"""
-    data = {}
-    # 燃烧设备/燃料类型
-    fuel_types = ["生产用锅炉燃料", "专用废气焚烧炉燃料", "危废焚烧炉燃料", "发电机燃料", "食堂炉灶燃料"]
-    for idx, fuel_type in enumerate(fuel_types):
-        data[fuel_type] = worksheet.cell(row=30 + idx, column=2).value
-
-    # 车辆燃料
-    vehicle_types = ["厂内转运叉车燃料", "自有商务车92#", "自有商务车95#", "自有商务车98#", "自有道路车辆燃料-柴油"]
-    for idx, vehicle_type in enumerate(vehicle_types):
-        data[vehicle_type] = worksheet.cell(row=36 + idx, column=2).value
-
-    # 切割、焊接燃料
-    data["切割、焊接燃料"] = worksheet.cell(row=41, column=2).value
-    return data
-
-
-def extract_section_4(worksheet) -> Dict[str, Any]:
-    """提取电力、热力使用部分"""
-    data = {}
-    # 用电/热单元 - 可统计情况
-    stat_types = ["全厂用电", "生产用电", "行政办公用电", "目标产品产线用电", "单耗用电"]
-    for idx, stat_type in enumerate(stat_types):
-        data[stat_type] = worksheet.cell(row=44 + idx, column=2).value
-
-    # 光伏发电量
-    data["光伏发电量"] = worksheet.cell(row=49, column=2).value
-    data["光伏发电配置"] = worksheet.cell(row=50, column=2).value
-
-    # 绿证购买
-    data["是否购买绿证"] = worksheet.cell(row=51, column=2).value
-
-    # 排放权益
-    data["是否购买排放权益"] = worksheet.cell(row=52, column=2).value
-
-    # 蒸汽参数
-    data["蒸汽温度"] = worksheet.cell(row=54, column=2).value
-    data["蒸汽压力"] = worksheet.cell(row=55, column=2).value
-
-    # 用蒸汽统计
-    steam_types = ["全厂用蒸汽", "生产用蒸汽", "行政类用蒸汽", "目标产品产线用蒸汽", "单耗用蒸汽"]
-    for idx, steam_type in enumerate(steam_types):
-        data[steam_type] = worksheet.cell(row=55 + idx, column=2).value
-    return data
-
-
-def extract_section_5(worksheet) -> Dict[str, Any]:
-    """提取制冷剂使用部分"""
-    data = {}
-    # 空调制冷剂1-5
-    for i in range(1, 6):
-        data[f"空调制冷剂{i}标号"] = worksheet.cell(row=61 + i, column=2).value
-        data[f"空调制冷剂{i}填充量"] = worksheet.cell(row=61 + i, column=4).value
-
-    # 冷冻机制冷剂1-5
-    for i in range(1, 6):
-        data[f"冷冻机制冷剂{i}标号"] = worksheet.cell(row=67 + i, column=2).value
-        data[f"冷冻机制冷剂{i}填充量"] = worksheet.cell(row=67 + i, column=4).value
-    return data
-
-
-def extract_section_6(worksheet) -> Dict[str, Any]:
-    """提取其他散逸类排放部分"""
-    data = {}
-    # CO2灭火器
-    data["CO2灭火器填充总量"] = worksheet.cell(row=75, column=2).value
-    # 员工总工时
-    data["核算期内员工总工时"] = worksheet.cell(row=76, column=2).value
-    return data
-
-
-def extract_section_7(worksheet) -> Dict[str, Any]:
-    """提取三废处理部分"""
-    data = {}
-    # 废水处理方式
-    data["废水处理方式"] = worksheet.cell(row=78, column=2).value
-    # 废水处理量
-    data["废水处理量"] = worksheet.cell(row=79, column=2).value
-    # 目标产品产线废水
-    data["目标产品产线废水"] = worksheet.cell(row=80, column=2).value
-    # COD浓度
-    data["COD浓度"] = worksheet.cell(row=81, column=2).value
-
-    # 污水处理药剂
-    for i in range(1, 4):
-        data[f"污水处理药剂{i}"] = worksheet.cell(row=83 + i, column=2).value
-
-    # 废气处理方式
-    data["废气处理方式"] = worksheet.cell(row=86, column=2).value
-
-    # 危废处理量
-    waste_types = ["危废委外焚烧", "危废自行焚烧", "危废委外资源化", "危废自行资源化"]
-    for idx, waste_type in enumerate(waste_types):
-        data[f"{waste_type}总量"] = worksheet.cell(row=87 + idx, column=2).value
-        data[f"{waste_type}目标产品产线分解"] = worksheet.cell(row=87 + idx, column=4).value
-
-    # 烟气处理药剂
-    for i in range(1, 5):
-        data[f"烟气处理药剂{i}"] = worksheet.cell(row=94 + i, column=2).value
-    return data
-
-
-def extract_section_8(worksheet) -> Dict[str, Any]:
-    """提取原材料使用部分"""
-    data = {}
-    # 生产工艺流程图
-    data["PCF核算目标产品生产工艺流程图"] = worksheet.cell(row=104, column=2).value
-    # 生产工艺流程文字描述
-    data["PCF核算目标产品生产工艺流程文字描述"] = worksheet.cell(row=105, column=2).value
-
-    # 原材料
-    for i in range(1, 11):
-        data[f"原材料{i}名称"] = worksheet.cell(row=106 + i, column=2).value
-        data[f"原材料{i}使用量"] = worksheet.cell(row=106 + i, column=3).value
-
-    # 供应商A-L
-    supplier_cols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
-    for idx, supplier in enumerate(supplier_cols):
-        data[f"供应商{supplier}"] = worksheet.cell(row=117 + idx, column=2).value
-    return data
-
-
-def extract_section_9(worksheet) -> Dict[str, Any]:
-    """提取生产耗材部分"""
-    data = {}
-    # 新鲜水
-    data["新鲜水统计口径"] = worksheet.cell(row=132, column=2).value
-    data["新鲜水使用量"] = worksheet.cell(row=132, column=3).value
-    data["新鲜水单位"] = worksheet.cell(row=132, column=4).value
-
-    # 氮气
-    data["氮气统计口径"] = worksheet.cell(row=133, column=2).value
-    data["氮气使用量"] = worksheet.cell(row=133, column=3).value
-    data["氮气单位"] = worksheet.cell(row=133, column=4).value
-    return data

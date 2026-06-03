@@ -1,6 +1,6 @@
 /**
  * API服务层 - 碳管师收资系统
- * 封装axios，统一Bearer Token处理
+ * 封装axios，使用httpOnly Cookie进行认证
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
@@ -12,41 +12,26 @@ const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // 必须开启 withCredentials，浏览器才会自动携带 httpOnly cookie
+  withCredentials: true,
 });
 
-// Token存储
-let authToken: string | null = null;
-
-export const setAuthToken = (token: string | null) => {
-  authToken = token;
-  if (token) {
-    localStorage.setItem('auth_token', token);
-  } else {
-    localStorage.removeItem('auth_token');
-  }
+// [已废弃] 旧版用 Bearer Token + localStorage；新版本统一用 httpOnly Cookie
+// 这里保留为 no-op 是为了不破坏外部 import，但所有调用方应停止使用
+export const setAuthToken = (_token: string | null): void => {
+  // no-op: token 由后端 Set-Cookie 写入，前端无权限也无必要接触
 };
+export const getAuthToken = (): string | null => null;
 
-export const getAuthToken = (): string | null => {
-  if (authToken) return authToken;
-  authToken = localStorage.getItem('auth_token');
-  return authToken;
-};
-
-// 请求拦截器 - 添加Token
+// 请求拦截器
 apiClient.interceptors.request.use(
   (config) => {
-    const token = getAuthToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     // 添加请求ID便于追踪
     const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     config.headers['X-Request-ID'] = requestId;
-    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url} [${requestId}]`);
     return config;
   },
   (error) => {
-    console.error('[API Request Error]', error);
     return Promise.reject(error);
   }
 );
@@ -54,38 +39,31 @@ apiClient.interceptors.request.use(
 // 响应拦截器 - 处理错误
 apiClient.interceptors.response.use(
   (response) => {
-    const requestId = response.config.headers['X-Request-ID'] as string;
-    console.log(`[API Response] ${response.config.method?.toUpperCase()} ${response.config.url} [${requestId}] ${response.status}`);
     return response;
   },
   (error) => {
-    const requestId = error.config?.headers?.['X-Request-ID'] as string;
     const status = error.response?.status;
-    const url = error.config?.url;
-    const method = error.config?.method?.toUpperCase();
-    const errorMessage = error.response?.data?.detail || error.message;
-
-    // 构建详细错误日志
-    const errorLog = {
-      type: 'API Error',
-      requestId,
-      method,
-      url,
-      status,
-      message: errorMessage,
-      stack: error.stack,
-      timestamp: new Date().toISOString()
-    };
-
-    console.error('[API Error]', errorLog);
+    const data = error.response?.data ?? {};
+    // 新错误体系（S3.12）：后端 AppException 返回 { error_code, user_message }
+    const errorCode = data.error_code;
+    const userMessage = data.user_message;
 
     if (status === 401) {
-      // Token过期或无效，清除登录状态
-      console.warn('[API Auth] Token expired or invalid, redirecting to login');
-      setAuthToken(null);
+      // 401 表示 Cookie 过期或被踢出，通过 custom event 通知 AuthProvider / router
       if (typeof window !== 'undefined') {
-        window.location.href = '/login';
+        window.dispatchEvent(new CustomEvent('auth:logout'));
       }
+    }
+
+    // 把 AppException 的 user_message 挂到 error 对象上，方便业务层 catch 时直接用
+    if (errorCode) {
+      (error as any).appErrorCode = errorCode;
+      (error as any).appUserMessage = userMessage;
+    }
+
+    // 控制台仅打精简错误（不打印 stack、Authorization、请求体）
+    if (status && status >= 500) {
+      console.error('[API Error]', status, userMessage || error.message);
     }
 
     return Promise.reject(error);
@@ -132,6 +110,10 @@ export const authApi = {
 
   getMe: (): Promise<AxiosResponse<UserInfo>> =>
     apiClient.get('/auth/me'),
+
+  // 使用httpOnly cookie认证获取当前用户
+  getMeCookie: (): Promise<AxiosResponse<UserInfo>> =>
+    apiClient.get('/auth/me/cookie'),
 
   logout: (): Promise<AxiosResponse<{ message: string }>> =>
     apiClient.post('/auth/logout'),
@@ -210,6 +192,15 @@ export interface UploadResponse {
   status: string;
 }
 
+export interface SectionFile {
+  id: number;
+  name: string;
+  size: number;
+  type: string;
+  status: string;
+  created_at: string;
+}
+
 export const fileApi = {
   upload: (
     sessionId: string,
@@ -237,6 +228,15 @@ export const fileApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+
+  getSectionFiles: (
+    sessionId: string,
+    section: number
+  ): Promise<AxiosResponse<{ files: SectionFile[] }>> =>
+    apiClient.get(`/files/${sessionId}/section/${section}`),
+
+  deleteFile: (fileId: number): Promise<AxiosResponse<{ success: boolean; message: string }>> =>
+    apiClient.delete(`/files/${fileId}`),
 };
 
 // ============== AI对话API ==============

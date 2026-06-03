@@ -36,6 +36,10 @@ class Config:
 | `DATABASE_URL` | PostgreSQL连接字符串 | 数据库地址 |
 | `VECTOR_DB_TYPE` | pgvector | 向量数据库类型 |
 | `REDIS_URL` | redis://localhost:6379/0 | Redis地址 |
+| `ENVIRONMENT` | development | `production` 启用默认凭证启动检查（S5） |
+| `REQUIRE_NON_DEFAULT_CREDENTIALS` | true | 生产环境禁止默认凭证 tantan_user/tantan_password |
+| `COOKIE_SECURE` | false | 生产 True（HTTPS only）；dev False（HTTP） |
+| `COOKIE_SAMESITE` | strict | CSRF 防御；可设 `lax`/`none` |
 
 ## 验证
 

@@ -42,10 +42,20 @@ const [isWindowDragging, setIsWindowDragging] = useState(false);
 
 ### 条件字段渲染
 
-条件字段检查逻辑：
-- 检查 conditionField 是否存在且有值
-- 只有当条件字段值等于 conditionValue 时才显示
-- 空值或未定义会隐藏条件字段
+使用 Antd 的 `Form.useWatch([], form)` 订阅整个表单值变化：
+
+- `const watchedValues = Form.useWatch([], form)` 在组件顶层订阅
+- 条件字段检查 `watchedValues?.[field.conditionField]` 与 `conditionValue` 是否相等
+- 任何字段变化都会触发 watchedValues 更新，从而重新评估条件字段可见性
+- 不需要手动 forceUpdate / remountKey / onValuesChange，Form 实例不会重新挂载
+
+### Multi-row 表格响应式
+
+multi-row 字段的 entries 也使用 `watchedValues?.[field.key]` 取值：
+
+- `form.setFieldValue` 更新后，`Form.useWatch` 会触发重渲染
+- 添加/删除行后表格立即刷新
+- AI 自动填充 multi-row 数据也走同一条路径
 
 ### AI对话
 

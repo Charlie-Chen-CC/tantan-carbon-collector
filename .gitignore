@@ -39,6 +39,17 @@ uploads/*
 !uploads/.gitkeep
 !uploads/CLAUDE.md
 
+# ============ 测试数据 (698MB，不进版本控制) ============
+# negation 必须放在 ignored 规则之前或同级才能生效
+!test_doc/.gitkeep
+!backend/test_doc/.gitkeep
+!test_doc/README.md
+test_doc/*
+!test_doc/.gitkeep
+!test_doc/README.md
+backend/test_doc/*
+!backend/test_doc/.gitkeep
+
 # ============ 构建产物 ============
 build/
 dist/

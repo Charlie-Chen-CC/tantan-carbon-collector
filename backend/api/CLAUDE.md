@@ -6,6 +6,19 @@ FastAPI路由器，提供所有HTTP API端点。
 
 所有路由挂载在 `/api` 前缀下。
 
+**Phase 2.4 拆分结构**（`routes.py` 仅 22 行聚合器）：
+- `auth_router.py` - `/api/auth/*` 鉴权端点（注册/登录/登出/me/profile）
+- `sessions_router.py` - `/api/session` + `/api/sessions`
+- `files_router.py` - `/api/upload` + `/api/task/{id}` + `/api/files/*`
+- `extract_router.py` - `/api/extract/{session}/section/{n}` + `/batch` (SSE)
+- `form_router.py` - `/api/form/{session}` + `/form/{session}/section/{n}` (GET/PATCH/POST)
+- `chat_router.py` - `/api/chat` + `/api/chat/stream` + `/api/modify/{session}`
+- `history_router.py` - `/api/history/{session}`
+
+**辅助文件**：
+- `validation.py` - python-magic 真实 MIME 探测（被 files_router 调用）
+- `models.py` - Pydantic 请求/响应模型集中位置
+
 ## 主要端点
 
 ### 会话管理
@@ -27,7 +40,15 @@ FastAPI路由器，提供所有HTTP API端点。
 
 ### AI对话
 - `POST /api/chat` - 发送消息（非流式）
-- `POST /api/chat/stream` - 流式对话（SSE）
+- `POST /api/chat/stream` - 流式对话（SSE，**Phase 5.3 真实流式**：LLM token-by-token）
+
+**Phase 5.3 真实流式说明**：
+- 之前：等 `generate_response()` 整段返回后再按 10 字符切片 yield，user 看到的"流式"是假的
+- 现在：`QAAgent.generate_response_stream()` 同步生成器，事件序列 `intent → message(×N) → done`
+- LLM 流式：`_stream_llm_chat` 直接调 `AliLLMClient.chat(stream=True)`，逐 token yield
+- 规则回答（guidance / chitchat）：一次性 yield 整段
+- RAG 流式：调 `RAGPipeline.answer_stream()` 已有实现
+- 响应类：`StreamingResponse + ServerSentEvent.encode()`（**不用 `EventSourceResponse`**，sse_starlette 1.8+ 内部 `AppStatus.should_exit_event` 类级 anyio.Event 跨测试时会绑到已关闭的 event loop）
 
 ### 修改
 - `POST /api/modify/{session_id}` - 修改表单数据
@@ -53,16 +74,24 @@ class ModifyRequest(BaseModel):
 
 ## 状态管理器
 
-使用 `StateManager` (默认 `InMemoryStateManager`) 管理会话状态。
-- 支持 Redis 模式（设置环境变量切换）
+使用 `StateManager` (代理到 `DatabaseStateManager`) 管理会话状态。
+- 统一用 PostgreSQL 持久化
 - 会话数据7天过期（可通过 SESSION_EXPIRE_SECONDS 环境变量配置）
+
+## 认证
+
+- **httpOnly Cookie** 是唯一认证方式：`Set-Cookie: auth_token=...; HttpOnly; Secure(prod); SameSite=Strict; Max-Age=604800; Path=/`
+- `get_current_user` 依赖注入从 `auth_token` cookie 读 token，不再支持 Bearer Authorization 头
+- 旧接口 `get_current_user_from_cookie` 仍保留作 no-op alias
+- Redis 仍是 token 存储后端（dev 环境降级到内存）；client 端完全无 token 概念
 
 ## 文件上传验证
 
-- 最大文件大小: 10MB (可通过环境变量配置)
-- 允许的文件类型: `.xlsx`, `.xls`, `.pdf`, `.docx`, `.doc`, `.pptx`, `.md`
-- MIME类型验证
-- 文件名安全清理（防止路径遍历）
+- 最大文件大小: 10MB (硬编码 `MAX_FILE_SIZE` 常量)
+- 允许的文件类型: `.xlsx`, `.xls`, `.pdf`, `.docx`, `.doc`, `.pptx`, `.md`, `.png`, `.jpg`, `.jpeg`
+- **真实 MIME 探测**：使用 `python-magic` (即 `python-magic-bin==0.4.14` Windows 平台二进制) 读取文件前 2KB 探测真实 MIME
+- **扩展名 ↔ MIME 双向校验**：`EXT_TO_MIMES` 字典维护每个扩展名对应的真实 MIME 白名单，防止「扩展名白名单 + 实际内容是 PE 可执行文件」的攻击
+- **UUID 文件名重写**：上传文件用 `uuid.uuid4().hex` 重新命名，丢弃客户端原始文件名（防止路径遍历 + 防止泄露用户隐私）
 
 ## 日志
 
@@ -71,3 +100,12 @@ class ModifyRequest(BaseModel):
 - 表单确认 (`/api/form/{session_id}/section/{section}/confirm`)
 - 对话消息 (`/api/chat`)
 - 修改操作 (`/api/modify/{session_id}`)
+
+## 错误处理（S3.12 统一体系）
+
+- 旧散乱 `return {"error": str(e)}` / `HTTPException(400, str(e))` **已废弃**
+- 新体系：`AppException(ErrorCode, user_message, developer_message)` 详见 `tantan/backend/utils/exceptions.py`
+- 响应体只暴露 `error_code` + `user_message`；`developer_message` 仅写日志（绝不在响应中出现）
+- 全局 `@app.exception_handler(Exception)` 兜底：未捕获异常统一返回 `{error_code: INTERNAL_ERROR, user_message: "服务暂时不可用"}`，绝不向客户端泄露堆栈/SQL/路径
+- 前端 `services/api.ts` 拦截器把 `user_message` 挂到 error 对象 (`error.appUserMessage`)，业务层 catch 时可直接 `message.error(err.appUserMessage)`
+- 新增业务异常时：先在 `ErrorCode` 枚举加值，再 `raise AppException(ErrorCode.X, user_msg)`，不要直接 raise HTTPException

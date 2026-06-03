@@ -26,7 +26,7 @@ export default function HomePage() {
       alignItems: 'center',
       justifyContent: 'center'
     }}>
-      <Spin size="large" tip="加载中..." />
+      <Spin size="large" description="加载中..." />
     </div>
   );
 }

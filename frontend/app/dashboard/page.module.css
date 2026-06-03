@@ -1,0 +1,746 @@
+/* ============================================
+   碳管师收资系统 - 专业环保主题 UI
+   设计风格：环保工业风 / 企业专业级
+   ============================================ */
+
+/* ============ 全局样式 ============ */
+.dashboardContainer {
+  min-height: 100vh;
+  display: flex;
+  background: var(--color-bg-primary);
+  font-family: var(--font-family);
+}
+
+/* ============ 侧边栏 ============ */
+.sider {
+  width: 280px;
+  background: var(--color-bg-card) !important;
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.siderCollapsed {
+  width: 72px !important;
+}
+
+.siderHeader {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--color-border-light);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  flex-shrink: 0;
+}
+
+.siderLogo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.siderLogoIcon {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+}
+
+.siderLogoText {
+  display: flex;
+  flex-direction: column;
+}
+
+.siderLogoTitle {
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.siderLogoSubtitle {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+/* ============ Steps 进度条 ============ */
+.stepsContainer {
+  padding: 20px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
+}
+
+.stepsTitle {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 16px;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.stepItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+}
+
+.stepItem:not(:last-child) {
+  padding-bottom: 20px;
+}
+
+.stepItem:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 24px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--color-border);
+}
+
+.stepItemCompleted:not(:last-child)::after {
+  background: var(--color-primary);
+}
+
+.stepNode {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  transition: all 0.2s ease;
+}
+
+.stepNodeDefault {
+  background: var(--color-bg-card);
+  border: 2px solid var(--color-border);
+  color: var(--color-text-tertiary);
+}
+
+.stepNodeActive {
+  background: var(--color-primary);
+  border: 2px solid var(--color-primary);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(13, 92, 99, 0.15);
+}
+
+.stepNodeCompleted {
+  background: var(--color-success);
+  border: 2px solid var(--color-success);
+  color: white;
+}
+
+.stepContent {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.stepName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  transition: color 0.2s ease;
+}
+
+.stepItemActive .stepName {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.stepItemCompleted .stepName {
+  color: var(--color-text-primary);
+}
+
+.stepMeta {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+/* 导航菜单 - 不再使用，由 Steps 代替 */
+.siderMenu {
+  display: none;
+}
+
+/* ============ 主内容区 ============ */
+.mainLayout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 顶部栏 */
+.header {
+  height: 64px;
+  background: var(--color-bg-card) !important;
+  padding: 0 28px !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.headerToggle {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.headerToggle:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-primary);
+}
+
+.headerTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 !important;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.headerUser {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.headerUser:hover {
+  background: var(--color-bg-secondary);
+}
+
+.headerAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.headerUsername {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.headerLogout {
+  color: var(--color-text-tertiary);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.headerLogout:hover {
+  color: var(--color-error);
+  background: rgba(211, 47, 47, 0.08);
+}
+
+/* ============ 内容区 ============ */
+.content {
+  flex: 1;
+  padding: 28px;
+  overflow-y: auto;
+  background: var(--color-bg-primary);
+}
+
+/* 内容卡片 */
+.contentCard {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--color-border-light);
+  overflow: hidden;
+}
+
+/* 卡片头部 */
+.cardHeader {
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, var(--color-bg-card) 0%, var(--color-bg-secondary) 100%);
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cardTitleIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 18px;
+}
+
+.cardTitleText {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 !important;
+}
+
+.cardSubtitle {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+.cardStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cardStatusNotStarted {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+.cardStatusInProgress {
+  background: rgba(20, 145, 155, 0.1);
+  color: var(--color-primary-light);
+}
+
+.cardStatusCompleted {
+  background: rgba(46, 125, 50, 0.1);
+  color: var(--color-success);
+}
+
+/* 卡片内容 */
+.cardBody {
+  padding: 28px;
+}
+
+/* 表单区域 */
+.formSection {
+  margin-bottom: 28px;
+}
+
+.formSectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--color-primary);
+  display: inline-block;
+}
+
+.formField {
+  margin-bottom: 20px;
+}
+
+.formLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.formLabelRequired {
+  color: var(--color-error);
+}
+
+/* ============ 按钮样式 ============ */
+.buttonGroup {
+  display: flex;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.buttonPrimary {
+  height: 44px;
+  padding: 0 28px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 500;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(13, 92, 99, 0.25);
+  cursor: pointer;
+}
+
+.buttonPrimary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(13, 92, 99, 0.35);
+}
+
+.buttonSecondary {
+  height: 44px;
+  padding: 0 24px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.buttonSecondary:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(13, 92, 99, 0.04);
+}
+
+/* ============ 文件上传区域 ============ */
+.uploadSection {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.uploadHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.uploadTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uploadHint {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: 10px;
+}
+
+/* ============ AI 助手 ============ */
+.aiWindow {
+  position: fixed;
+  right: 28px;
+  bottom: 100px;
+  width: 420px;
+  height: 560px;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+  border: 1px solid var(--color-border-light);
+}
+
+.aiHeader {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.aiHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aiHeaderIcon {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.aiHeaderTitle {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.aiHeaderSubtitle {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.aiClose {
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  color: white;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.aiClose:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.aiBody {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.aiConversations {
+  width: 120px;
+  background: var(--color-bg-secondary);
+  border-right: 1px solid var(--color-border-light);
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.aiNewChat {
+  width: 100%;
+  height: 36px;
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.aiConversationItem {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.2s ease;
+}
+
+.aiConversationItem:hover {
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+}
+
+.aiConversationItemActive {
+  background: var(--color-primary);
+  color: white;
+}
+
+.aiChatArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.aiMessages {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aiMessage {
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.aiMessageUser {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.aiMessageAssistant {
+  align-self: flex-start;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border-bottom-left-radius: 4px;
+}
+
+.aiEmptyChat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  padding: 20px;
+}
+
+.aiEmptyIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.aiEmptyTitle {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.aiEmptyHint {
+  font-size: 12px;
+}
+
+.aiInput {
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border-light);
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.aiInputField {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.aiInputField:focus {
+  border-color: var(--color-primary);
+}
+
+.aiSendButton {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.aiSendButton:hover {
+  transform: scale(1.05);
+}
+
+.aiSendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ============ 响应式 ============ */
+@media (max-width: 1024px) {
+  .sider {
+    width: 72px !important;
+  }
+
+  .siderLogoText,
+  .stepsContainer,
+  .stepName,
+  .stepMeta {
+    display: none;
+  }
+
+  .content {
+    padding: 20px;
+  }
+}

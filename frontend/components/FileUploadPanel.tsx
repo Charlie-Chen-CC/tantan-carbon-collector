@@ -1,125 +1,93 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Upload, Alert, Button, Space, message } from 'antd';
+/**
+ * 文件上传面板 - 纯组件（受控 props）
+ *
+ * 重构要点：
+ *   - 用 useFileUpload hook 替代手写 fetch + getAuthToken（已废弃）
+ *   - 后端 httpOnly cookie 认证，前端无 token 操作
+ *   - useRef uploadingRef 在 hook 内部防止重入上传（修复 3.7 重复上传）
+ *   - 切换 section 时 hook 自动刷新文件列表
+ *
+ * props：
+ *   - sessionId / section：当前会话与 section
+ *   - onDataExtracted：extract 返回的 filled_data 透传给父组件
+ */
+import { Upload, Alert, Button, Space, Progress } from 'antd';
 import {
   CheckCircleOutlined,
   LoadingOutlined,
   CloseCircleOutlined,
   FileOutlined,
   DeleteOutlined,
-  UploadOutlined
+  UploadOutlined,
 } from '@ant-design/icons';
+import { useFileUpload } from '../hooks/useFileUpload';
+import { SectionFile } from '../services/api';
 
-interface UploadFile {
-  id: string;
-  name: string;
-  size: number;
-  status: 'pending' | 'uploading' | 'processing' | 'completed' | 'failed';
-  progress: number;
-  error?: string;
-  extractedData?: any;
+type DisplayStatus = 'pending' | 'uploading' | 'processing' | 'completed' | 'failed';
+
+function toDisplayStatus(s: string): DisplayStatus {
+  if (s === 'processed') return 'completed';
+  if (s === 'uploading' || s === 'processing' || s === 'pending' || s === 'failed') {
+    return s as DisplayStatus;
+  }
+  return 'completed';
 }
 
-interface FileUploadPanelProps {
+export interface FileUploadPanelProps {
   sessionId: string;
   section: number;
-  onDataExtracted: (data: any) => void;
+  onDataExtracted: (data: Record<string, any>) => void;
 }
 
 export default function FileUploadPanel({
   sessionId,
   section,
-  onDataExtracted
+  onDataExtracted,
 }: FileUploadPanelProps) {
-  const [files, setFiles] = useState<UploadFile[]>([]);
+  const { files, isUploading, uploadAndExtract, deleteFile } = useFileUpload(sessionId, section);
 
-  const handleUpload = async (file: File) => {
-    const fileId = Math.random().toString(36).substr(2, 9);
-
-    // 添加到列表
-    setFiles(prev => [...prev, {
-      id: fileId,
-      name: file.name,
-      size: file.size,
-      status: 'uploading',
-      progress: 0
-    }]);
-
-    // 调用提取API
-    const formData = new FormData();
-    formData.append('file', file);
-
-    setFiles(prev => prev.map(f =>
-      f.id === fileId ? { ...f, status: 'processing', progress: 10 } : f
-    ));
-
-    try {
-      const response = await fetch(
-        `/api/extract/${sessionId}/section/${section}`,
-        {
-          method: 'POST',
-          body: formData
-        }
-      );
-
-      const result = await response.json();
-
-      setFiles(prev => prev.map(f =>
-        f.id === fileId ? {
-          ...f,
-          status: result.success ? 'completed' : 'failed',
-          progress: 100,
-          error: result.error,
-          extractedData: result.filled_data
-        } : f
-      ));
-
-      if (result.success && result.filled_data) {
-        onDataExtracted(result.filled_data);
-        message.success(`文件 "${file.name}" 提取完成`);
-      } else if (result.error) {
-        message.error(`文件 "${file.name}" 提取失败: ${result.error}`);
-      }
-    } catch (err: any) {
-      setFiles(prev => prev.map(f =>
-        f.id === fileId ? {
-          ...f,
-          status: 'failed',
-          error: err.message
-        } : f
-      ));
-      message.error(`文件 "${file.name}" 上传失败`);
+  const handleBeforeUpload = async (file: File): Promise<boolean> => {
+    const filledData = await uploadAndExtract(file);
+    if (filledData) {
+      onDataExtracted(filledData);
     }
-
-    return false; // 阻止默认上传
+    return false; // 阻止 antd Upload 默认行为
   };
 
-  const removeFile = (fileId: string) => {
-    setFiles(prev => prev.filter(f => f.id !== fileId));
+  const handleRemove = async (file: SectionFile) => {
+    await deleteFile(file.id);
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'completed': return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
-      case 'failed': return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
-      case 'processing': return <LoadingOutlined />;
-      default: return <FileOutlined />;
+      case 'completed':
+        return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+      case 'failed':
+        return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+      case 'processing':
+      case 'uploading':
+        return <LoadingOutlined />;
+      default:
+        return <FileOutlined />;
     }
   };
 
-  const completedCount = files.filter(f => f.status === 'completed').length;
-  const failedCount = files.filter(f => f.status === 'failed').length;
+  const completedCount = files.filter((f) => toDisplayStatus(f.status) === 'completed').length;
+  const failedCount = files.filter((f) => toDisplayStatus(f.status) === 'failed').length;
 
   return (
     <div style={{ marginTop: 24 }}>
       <Upload
         multiple
-        beforeUpload={handleUpload}
+        beforeUpload={handleBeforeUpload as any}
         showUploadList={false}
         accept=".pdf,.doc,.docx,.xlsx,.xls,.png,.jpg,.jpeg,.md,.ppt,.pptx"
       >
-        <Button icon={<UploadOutlined />}>批量上传证明文件</Button>
+        <Button icon={<UploadOutlined />} loading={isUploading}>
+          批量上传证明文件
+        </Button>
       </Upload>
 
       {files.length > 0 && (
@@ -128,7 +96,9 @@ export default function FileUploadPanel({
             message={
               <Space>
                 <span>已上传 {files.length} 个文件</span>
-                {completedCount > 0 && <span style={{ color: '#52c41a' }}>• {completedCount} 成功</span>}
+                {completedCount > 0 && (
+                  <span style={{ color: '#52c41a' }}>• {completedCount} 成功</span>
+                )}
                 {failedCount > 0 && <span style={{ color: '#ff4d4f' }}>• {failedCount} 失败</span>}
               </Space>
             }
@@ -137,43 +107,55 @@ export default function FileUploadPanel({
           />
 
           <div style={{ marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
-            {files.map(file => (
-              <div
-                key={file.id}
-                style={{
-                  padding: '8px 12px',
-                  marginBottom: 8,
-                  border: '1px solid #f0f0f0',
-                  borderRadius: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: file.status === 'failed' ? '#fff2f0' : '#fafafa'
-                }}
-              >
-                <Space>
-                  {getStatusIcon(file.status)}
-                  <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {file.name}
-                  </span>
-                  {file.status === 'processing' && (
-                    <span style={{ color: '#999' }}>处理中...</span>
-                  )}
-                  {file.error && (
-                    <span style={{ color: '#ff4d4f', fontSize: 12 }}>{file.error}</span>
-                  )}
-                </Space>
+            {files.map((file) => {
+              const status = toDisplayStatus(file.status);
+              return (
+                <div
+                  key={file.id}
+                  style={{
+                    padding: '8px 12px',
+                    marginBottom: 8,
+                    border: '1px solid #f0f0f0',
+                    borderRadius: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: status === 'failed' ? '#fff2f0' : '#fafafa',
+                  }}
+                >
+                  <Space>
+                    {getStatusIcon(status)}
+                    <span
+                      style={{
+                        maxWidth: 200,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {file.name}
+                    </span>
+                    {(status === 'processing' || status === 'uploading') && (
+                      <Progress
+                        percent={50}
+                        size="small"
+                        status="active"
+                        style={{ marginLeft: 8, display: 'inline-block', width: 100 }}
+                      />
+                    )}
+                  </Space>
 
-                {file.status !== 'processing' && (
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<DeleteOutlined />}
-                    onClick={() => removeFile(file.id)}
-                  />
-                )}
-              </div>
-            ))}
+                  {status !== 'processing' && status !== 'uploading' && (
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => handleRemove(file)}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
