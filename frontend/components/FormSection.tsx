@@ -25,6 +25,7 @@ import {
 import { UploadOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import { FieldDef } from '../config/sectionConfig';
+import MultiLevelTable from './MultiLevelTable';
 
 const { Text } = Typography;
 
@@ -238,6 +239,15 @@ export default function FormSection({ fields, watchedValues, onFileUpload }: For
         return (
           <Form.Item key={field.key} name={field.key} label={field.label} valuePropName="value">
             <MultiRowTable field={field} />
+          </Form.Item>
+        );
+      case 'nested':
+        // P0-6 修复：单条嵌套对象（如 section 9 freshWater/nitrogen），
+        // 子字段定义在 NESTED_FIELD_SCHEMA[field.key]，
+        // form 存为扁平 key（与后端 NESTED_FIELD_TRANSFORMERS 对齐）。
+        return (
+          <Form.Item key={field.key} name={field.key} label={field.label}>
+            <MultiLevelTable field={field} />
           </Form.Item>
         );
       default:

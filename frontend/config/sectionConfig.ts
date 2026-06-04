@@ -140,3 +140,28 @@ export const SECTION_FIELDS: { [section: number]: FieldDef[] } = {
     { key: 'nitrogen', label: '氮气', type: 'nested' },
   ],
 };
+
+/**
+ * P0-6 修复：'nested' 类型字段的子字段 schema
+ *
+ * 'nested' 与 'multi-row' 的本质区别：
+ *   - multi-row：数组形式，多行重复子字段（如多行燃料记录）
+ *   - nested：单条嵌套对象（如 freshWater 下有 caliber/amount/unit 三个属性）
+ *
+ * 字段命名约定（与后端 NESTED_FIELD_TRANSFORMERS 对齐）：
+ *   backend nested_field 名字（如"新鲜水"）→ frontend_key (e.g. "freshWater")
+ *   sub_fields.frontend_key = `${parentKey}Caliber` / `${parentKey}Amount` / `${parentKey}Unit`
+ *   这样后端 fill_form 返回的扁平 key 能直接进 form state，无需再转
+ */
+export const NESTED_FIELD_SCHEMA: Record<string, FieldDef[]> = {
+  freshWater: [
+    { key: 'caliber', label: '统计口径', type: 'text' },
+    { key: 'amount', label: '使用量', type: 'text' },
+    { key: 'unit', label: '单位', type: 'text' },
+  ],
+  nitrogen: [
+    { key: 'caliber', label: '统计口径', type: 'text' },
+    { key: 'amount', label: '使用量', type: 'text' },
+    { key: 'unit', label: '单位', type: 'text' },
+  ],
+};

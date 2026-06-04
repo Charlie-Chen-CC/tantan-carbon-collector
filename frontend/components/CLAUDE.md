@@ -39,7 +39,8 @@ components/
 
 子组件：
 - `MultiRowTable`：用 `Form.useFormInstance()` 拿 form 实例，用 `Form.useWatch(field.key, form)` 订阅多行数据
-- 字段渲染：`text` / `number` / `select` / `file` / `multi-row`
+- `MultiLevelTable`（P0-6 新增）：单条嵌套对象（如 section 9 freshWater），子字段 schema 来自 `NESTED_FIELD_SCHEMA`；form 存为扁平 key（`freshWaterCaliber` 等，与后端 NESTED_FIELD_TRANSFORMERS 对齐）
+- 字段渲染：`text` / `number` / `select` / `file` / `multi-row` / **`nested`**（P0-6 修复后）
 - 条件字段：`conditionField` + `conditionValue`，不满足返回 `null`
 
 ### FloatingAI
