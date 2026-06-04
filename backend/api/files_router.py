@@ -11,7 +11,7 @@ import os
 import uuid
 from typing import Optional, Dict, Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -20,6 +20,7 @@ from tantan.backend.api.validation import validate_file, MAX_FILE_SIZE
 from tantan.backend.models.database import User, get_db_context
 from tantan.backend.state.database_manager import DatabaseStateManager
 from tantan.backend.utils import log_exception
+from tantan.backend.utils.exceptions import AppException, ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -45,21 +46,33 @@ async def upload_file(
     logger.info(f"文件上传请求: session_id={session_id}, section={section}, filename={file.filename}")
 
     if not 1 <= section <= 9:
-        raise HTTPException(status_code=400, detail="无效的部分编号（1-9）")
+        raise AppException(
+            ErrorCode.SESSION_INVALID_SECTION,
+            "无效的部分编号（1-9）",
+            status_code=400,
+        )
 
     session_data = state_manager.get_session(current_user.id, session_id)
     if not session_data:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise AppException(
+            ErrorCode.SESSION_NOT_FOUND,
+            "会话不存在",
+            status_code=404,
+        )
 
     try:
         ext, safe_filename = validate_file(file)
-    except HTTPException as e:
-        logger.warning(f"文件验证失败: {e.detail}")
-        raise e
+    except AppException as e:
+        logger.warning(f"文件验证失败: {e.user_message}")
+        raise
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail=f"文件大小超过限制(10MB)")
+        raise AppException(
+            ErrorCode.FILE_TOO_LARGE,
+            f"文件大小超过限制(10MB)",
+            status_code=400,
+        )
 
     upload_dir = "uploads"
     os.makedirs(upload_dir, exist_ok=True)
@@ -122,7 +135,11 @@ async def download_file(
     """下载文件（需认证）"""
     upload_dir = "uploads"
     if not os.path.exists(upload_dir):
-        raise HTTPException(status_code=404, detail="文件不存在")
+        raise AppException(
+            ErrorCode.FILE_NOT_FOUND,
+            "文件不存在",
+            status_code=404,
+        )
 
     found_path = None
     for filename in os.listdir(upload_dir):
@@ -131,7 +148,11 @@ async def download_file(
             break
 
     if not found_path:
-        raise HTTPException(status_code=404, detail="文件不存在")
+        raise AppException(
+            ErrorCode.FILE_NOT_FOUND,
+            "文件不存在",
+            status_code=404,
+        )
 
     try:
         with get_db_context() as db:
@@ -140,18 +161,31 @@ async def download_file(
                 UploadedFile.file_path == found_path
             ).first()
             if not file_record:
-                raise HTTPException(status_code=404, detail="文件不存在")
+                raise AppException(
+                    ErrorCode.FILE_NOT_FOUND,
+                    "文件不存在",
+                    status_code=404,
+                )
             session_record = db.query(DBSession).filter(
                 DBSession.id == file_record.session_id,
                 DBSession.user_id == current_user.id
             ).first()
             if not session_record:
-                raise HTTPException(status_code=403, detail="无权访问此文件")
-    except HTTPException:
+                raise AppException(
+                    ErrorCode.OPERATION_NOT_ALLOWED,
+                    "无权访问此文件",
+                    status_code=403,
+                )
+    except AppException:
         raise
     except Exception as e:
         logger.error(f"文件权限验证失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="文件访问验证失败")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "文件访问验证失败",
+            status_code=500,
+            developer_message=str(e),
+        )
 
     async def file_iterator():
         with open(found_path, "rb") as f:
@@ -174,11 +208,19 @@ async def get_section_files(
     """获取指定部分的已上传文件列表"""
     try:
         if not 1 <= section <= 9:
-            raise HTTPException(status_code=400, detail="无效的部分编号（1-9）")
+            raise AppException(
+                ErrorCode.SESSION_INVALID_SECTION,
+                "无效的部分编号（1-9）",
+                status_code=400,
+            )
 
         session_data = state_manager.get_session(current_user.id, session_id)
         if not session_data:
-            raise HTTPException(status_code=404, detail="会话不存在")
+            raise AppException(
+                ErrorCode.SESSION_NOT_FOUND,
+                "会话不存在",
+                status_code=404,
+            )
 
         with get_db_context() as db:
             from tantan.backend.models.database import UploadedFile, Session as DBSession
@@ -188,7 +230,11 @@ async def get_section_files(
             ).first()
 
             if not db_session:
-                raise HTTPException(status_code=404, detail="会话不存在")
+                raise AppException(
+                    ErrorCode.SESSION_NOT_FOUND,
+                    "会话不存在",
+                    status_code=404,
+                )
 
             files = db.query(UploadedFile).filter(
                 UploadedFile.session_id == db_session.id,
@@ -208,11 +254,16 @@ async def get_section_files(
                     for f in files
                 ]
             }
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         log_exception(logger, e, {"session_id": session_id, "section": section, "user_id": current_user.user_id, "action": "get_section_files"})
-        raise HTTPException(status_code=500, detail=f"获取文件列表失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "获取文件列表失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )
 
 
 @router.delete("/files/{file_id}")
@@ -227,14 +278,22 @@ async def delete_file(
 
             file_record = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
             if not file_record:
-                raise HTTPException(status_code=404, detail="文件不存在")
+                raise AppException(
+                    ErrorCode.FILE_NOT_FOUND,
+                    "文件不存在",
+                    status_code=404,
+                )
 
             session_record = db.query(DBSession).filter(
                 DBSession.id == file_record.session_id,
                 DBSession.user_id == current_user.id
             ).first()
             if not session_record:
-                raise HTTPException(status_code=403, detail="无权删除此文件")
+                raise AppException(
+                    ErrorCode.OPERATION_NOT_ALLOWED,
+                    "无权删除此文件",
+                    status_code=403,
+                )
 
             file_path = file_record.file_path
             if os.path.exists(file_path):
@@ -246,8 +305,13 @@ async def delete_file(
             logger.info(f"文件删除成功: file_id={file_id}")
 
             return {"success": True, "message": "文件删除成功"}
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         log_exception(logger, e, {"file_id": file_id, "user_id": current_user.user_id, "action": "delete_file"})
-        raise HTTPException(status_code=500, detail=f"删除文件失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "删除文件失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )

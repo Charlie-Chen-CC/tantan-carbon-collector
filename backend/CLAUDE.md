@@ -132,6 +132,9 @@ except Exception:
 - 业务异常统一用 `AppException(ErrorCode, user_message, developer_message)`，见 `tantan/backend/utils/exceptions.py`
 - `developer_message` 记日志即可，绝不出现在响应体
 - 全局 `@app.exception_handler(Exception)` 兜底统一返回 `{error_code: INTERNAL_ERROR, user_message: "服务暂时不可用"}`
+- **P0-1 完成（2026-06-04）**：8 个 router 文件共 52 处 `HTTPException` 已 100% 切换到 `AppException`
+  - 测试守门：`backend/tests/backend/api/test_exceptions.py` 18 个 AST 扫描 + 响应格式测试
+  - 错误码规范：见 `backend/api/CLAUDE.md` 的"4xx 错误码使用规范"章节
 
 ## 数据库
 

@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, Form
 from pydantic import BaseModel
 
 from tantan.backend.agents import ModifyAgent
@@ -17,6 +17,7 @@ from tantan.backend.api.auth import get_current_user
 from tantan.backend.models.database import User
 from tantan.backend.state.database_manager import DatabaseStateManager
 from tantan.backend.utils import log_exception
+from tantan.backend.utils.exceptions import AppException, ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,11 @@ async def get_form(session_id: str, current_user: User = Depends(get_current_use
     session_data = state_manager.get_session(current_user.id, session_id)
 
     if not session_data:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise AppException(
+            ErrorCode.SESSION_NOT_FOUND,
+            "会话不存在",
+            status_code=404,
+        )
 
     return {
         "session_id": session_id,
@@ -54,11 +59,19 @@ async def update_section(
 ):
     """更新部分数据"""
     if not 1 <= section <= 9:
-        raise HTTPException(status_code=400, detail="无效的部分编号（1-9）")
+        raise AppException(
+            ErrorCode.SESSION_INVALID_SECTION,
+            "无效的部分编号（1-9）",
+            status_code=400,
+        )
 
     session_data = state_manager.get_session(current_user.id, session_id)
     if not session_data:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise AppException(
+            ErrorCode.SESSION_NOT_FOUND,
+            "会话不存在",
+            status_code=404,
+        )
 
     current_data = state_manager.get_form_data(current_user.id, session_id, section)
     current_value = current_data.get(field)
@@ -98,11 +111,19 @@ async def confirm_section(
     logger.info(f"确认部分完成: session_id={session_id}, section={section}")
 
     if not 1 <= section <= 9:
-        raise HTTPException(status_code=400, detail="无效的部分编号（1-9）")
+        raise AppException(
+            ErrorCode.SESSION_INVALID_SECTION,
+            "无效的部分编号（1-9）",
+            status_code=400,
+        )
 
     session_data = state_manager.get_session(current_user.id, session_id)
     if not session_data:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise AppException(
+            ErrorCode.SESSION_NOT_FOUND,
+            "会话不存在",
+            status_code=404,
+        )
 
     state_manager.save_form_data(current_user.id, session_id, section, confirm_data.data)
     state_manager.update_progress(current_user.id, session_id, section, "completed")
@@ -130,11 +151,19 @@ async def set_current_section(
 ):
     """切换当前部分"""
     if not 1 <= section <= 9:
-        raise HTTPException(status_code=400, detail="无效的部分编号（1-9）")
+        raise AppException(
+            ErrorCode.SESSION_INVALID_SECTION,
+            "无效的部分编号（1-9）",
+            status_code=400,
+        )
 
     session_data = state_manager.get_session(current_user.id, session_id)
     if not session_data:
-        raise HTTPException(status_code=404, detail="会话不存在")
+        raise AppException(
+            ErrorCode.SESSION_NOT_FOUND,
+            "会话不存在",
+            status_code=404,
+        )
 
     state_manager.set_current_section(current_user.id, session_id, section)
     state_manager.update_progress(current_user.id, session_id, section, "in_progress")
