@@ -21,16 +21,16 @@ Phase 4：P0-1 完成 / 准备 P0-3
 
 - [x] **P0-1** AppException 替换 52 处 HTTPException（分支：fix/phase1-p0-1-app-exception）
 - [ ] **P0-2** LLM/RAG/向量库 异步化（最大工作量）
-- [ ] **P0-3** 文件下载 404 bug 修复
-- [ ] **P0-4** batch SSE 假流式 + AST 违规
-- [ ] **P0-5** 登出清 localStorage（GDPR）
+- [x] **P0-3** 文件下载 404 bug 修复
+- [x] **P0-4** batch SSE 假流式 + AST 违规（分支：fix/phase1-p0-4-batch-sse）
+- [x] **P0-5** 登出清 localStorage（GDPR）
 - [ ] **P0-6** sectionConfig 'nested' 类型处理器（选 B：新增 MultiLevelTable）
 - [ ] **P0-7** codegen 生成 broken TS 修复
 - [ ] **P0-8** Playwright fixtures 缺失修复
 - [ ] **P0-9** useFileUpload 上传文件两次修复（改 /api/extract 接收 file_id）
 - [ ] **P0-10** useFormState 挂起等 auth check
 
-**Status:** P0-1 done, 9 remaining
+**Status:** P0-1/3/4/5 done, 6 remaining
 
 ### Phase 5: 错误处理 + 规范落地（1 周）
 - pre-commit hook（ruff + eslint + mypy + codegen --check + tsc --noEmit）

@@ -42,6 +42,19 @@ FastAPI路由器，提供所有HTTP API端点。
 - `POST /api/chat` - 发送消息（非流式）
 - `POST /api/chat/stream` - 流式对话（SSE，**Phase 5.3 真实流式**：LLM token-by-token）
 
+### 文件提取
+- `POST /api/extract/{session_id}/section/{section}` - 提取文件中特定部分数据
+- `POST /api/extract/{session_id}/section/{section}/batch` - 批量提取（**P0-4 真实流式进度**：每文件 yield 一次 progress 事件）
+
+**P0-4 修复说明（2026-06-04）**：
+- 修前 bug：① `progress_callback` 是死代码（原占位注释 "P0-4 batch SSE 假流式修复见..."）；② `yield ServerSentEvent(...)` 直接 yield 对象，StreamingResponse 序列化时抛 `TypeError("encode() takes 1 positional argument but 2 were given")`
+- 修后实现：① 把 `await f.read()` 移到路由函数体（yield 之前），避免 `I/O operation on closed file`；② `progress_callback` 是真 `async def` callable，用 `asyncio.Queue` 桥接到 event_generator；③ 用 `asyncio.create_task(process_batch(...))` 后台跑，主循环 `wait_for(queue.get(), 0.5)` 拉事件 yield；④ 所有 `yield ServerSentEvent(...).encode()` 返回 bytes
+- 事件序列：`started (0/total) → progress(1/total) → ... → progress(total/total) → complete({status, extracted, warnings, failed_files})`，或 catastrophic 异常时 `error({error_code, user_message})`
+- 守门测试：`tests/backend/api/test_batch_sse.py`（6 个测试：3 个事件序列 + 3 个 AST 守门）
+  - `TestBatchSSEProgress` 验证 per-file progress 事件流（mock BatchFileProcessor）
+  - `TestBatchSSEASTGuard` 防止"假流式占位注释"复发、强制 `progress_callback=` 传参、强制 yield `.encode()` bytes
+- 注意：BatchFileProcessor 本身有独立 bug（`_priority_to_group_key` 不映射 'excel' 组 → 纯 xlsx 批次 0 处理），属于另一个 P 级别，不在 P0-4 范围
+
 **Phase 5.3 真实流式说明**：
 - 之前：等 `generate_response()` 整段返回后再按 10 字符切片 yield，user 看到的"流式"是假的
 - 现在：`QAAgent.generate_response_stream()` 同步生成器，事件序列 `intent → message(×N) → done`
