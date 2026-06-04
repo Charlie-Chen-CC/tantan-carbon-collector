@@ -78,7 +78,10 @@ async def upload_file(
     os.makedirs(upload_dir, exist_ok=True)
 
     file_id = uuid.uuid4().hex
-    file_path = os.path.join(upload_dir, f"{file_id}{ext}")
+    # P0-3 修复（2026-06-04）：上传路径加 `_` 前缀，匹配 download_file 的
+    # `filename.startswith(file_id + "_")` 约定。重构后两边前缀不一致
+    # 导致 GET /api/files/{file_id} 永远 404。详见 docs/CODE_REVIEW_2026-06-03.md 3.4
+    file_path = os.path.join(upload_dir, f"{file_id}_{ext}")
 
     with open(file_path, "wb") as f:
         f.write(content)

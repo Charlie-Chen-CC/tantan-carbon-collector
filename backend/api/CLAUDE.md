@@ -92,6 +92,7 @@ class ModifyRequest(BaseModel):
 - **真实 MIME 探测**：使用 `python-magic` (即 `python-magic-bin==0.4.14` Windows 平台二进制) 读取文件前 2KB 探测真实 MIME
 - **扩展名 ↔ MIME 双向校验**：`EXT_TO_MIMES` 字典维护每个扩展名对应的真实 MIME 白名单，防止「扩展名白名单 + 实际内容是 PE 可执行文件」的攻击
 - **UUID 文件名重写**：上传文件用 `uuid.uuid4().hex` 重新命名，丢弃客户端原始文件名（防止路径遍历 + 防止泄露用户隐私）
+- **P0-3 修复（2026-06-04）**：上传路径用 `f"{file_id}_{ext}"`（带 `_` 前缀）匹配下载 `filename.startswith(file_id + "_")` 约定。重构前 06-03 引入 1 行 bug 导致 GET /api/files/{file_id} 永远 404。回归测试：`test_files.py::TestUpload::test_upload_then_download_roundtrip`
 
 ## 日志
 
