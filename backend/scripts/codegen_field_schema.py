@@ -150,20 +150,34 @@ def gen_section_config_ts(schema: dict) -> str:
     for sec in schema["sections"]:
         out.append(f"  {sec['id']}: [\n")
         for f in sec["fields"]:
-            parts = [f"key: '{f['frontend']}'", f"label: '{f['backend']}'", f"type: '{f['type']}'"]
+            # P0-7 修复：sub_fields 不能再塞进 parts 然后用 ', ' join，
+            # 否则会产出 `fields: [, {key:...}, {key:...}, ]` 这样的 broken TS
+            # （[ 和 , 之间多个空逗号让 tsc 报 Type 'undefined' is not assignable）
+            # 改为：basic attrs 用 ', ' join，sub_fields 独立拼成多行字符串
+            basic_parts = [f"key: '{f['frontend']}'", f"label: '{f['backend']}'", f"type: '{f['type']}'"]
             if f.get("required"):
-                parts.append("required: true")
+                basic_parts.append("required: true")
             if f.get("placeholder"):
-                parts.append(f"placeholder: '{f['placeholder']}'")
+                basic_parts.append(f"placeholder: '{f['placeholder']}'")
             if f.get("options"):
                 opts = ", ".join(f"'{o}'" for o in f["options"])
-                parts.append(f"options: [{opts}]")
+                basic_parts.append(f"options: [{opts}]")
+
             if f.get("sub_fields"):
-                parts.append("fields: [")
-                for sf in f["sub_fields"]:
-                    parts.append(f"    {{ key: '{sf['frontend']}', label: '{sf['backend']}', type: 'text' }},")
-                parts.append("  ]")
-            out.append(f"    {{ {', '.join(parts)} }},\n")
+                # 缩进对齐：每个 sub_field 占独立行，4 空格 base + 2 空格 sub
+                sub_lines = ",\n".join(
+                    f"      {{ key: '{sf['frontend']}', label: '{sf['backend']}', type: 'text' }}"
+                    for sf in f["sub_fields"]
+                )
+                field_obj = (
+                    f"    {{ {', '.join(basic_parts)}, fields: [\n"
+                    f"{sub_lines}\n"
+                    f"    ] }},\n"
+                )
+            else:
+                field_obj = f"    {{ {', '.join(basic_parts)} }},\n"
+
+            out.append(field_obj)
         out.append("  ],\n")
     out.append("};\n")
     return "".join(out)

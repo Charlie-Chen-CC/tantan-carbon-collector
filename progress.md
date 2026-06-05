@@ -26,6 +26,22 @@
 - 创建 `backup/pre-refactor-2026-06-01` 分支
 - 用户中断 `git add -A` 后改方向为"先审查"
 
+### Phase 3: 10 个 P0 顺序修复
+- **Status:** in_progress
+- **Started:** 2026-06-03 18:00
+- **Workflow:** TDD（先写测试再实现）+ 每个 P0 一个 git 分支 + 必更新 CLAUDE.md
+- **P0 进度：**
+  - ✓ **P0-1** AppException 替换 52 处 HTTPException（PR #1）
+  - ⏳ **P0-2** LLM/RAG/向量库 异步化（最大工作量，最后做）
+  - ✓ **P0-3** 文件下载 404 bug 修复（1 行）
+  - ✓ **P0-4** batch SSE 假流式 + AST 违规
+  - ✓ **P0-5** 登出清 localStorage（GDPR）
+  - ✓ **P0-6** sectionConfig 'nested' 类型处理器
+  - ⏳ **P0-7** codegen 生成 broken TS 修复（5/5 守门测试通过，待 commit）
+  - ⬜ **P0-8** Playwright fixtures 缺失修复
+  - ⬜ **P0-9** useFileUpload 上传文件两次修复
+  - ⬜ **P0-10** useFormState 挂起等 auth check
+
 ## Test Results
 
 | Test | Input | Expected | Actual | Status |

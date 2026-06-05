@@ -57,17 +57,53 @@ export const SECTION_FIELDS: { [section: number]: FieldDef[] } = {
     { key: 'byproductsNote', label: '副产品超过5种的说明', type: 'text' },
   ],
   3: [
-    { key: 'boilerFuel', label: '生产用锅炉燃料', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,     { key: 'amount', label: '使用量', type: 'text' },,     { key: 'unit', label: '单位', type: 'text' },,     { key: 'measuredCalorific', label: '实测热值', type: 'text' },,     { key: 'calorificUnit', label: '热值单位', type: 'text' },,   ] },
-    { key: 'wasteIncineratorFuel', label: '专用废气焚烧炉燃料', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,     { key: 'amount', label: '使用量', type: 'text' },,     { key: 'unit', label: '单位', type: 'text' },,   ] },
-    { key: 'hazardousWasteBurnerFuel', label: '危废焚烧炉燃料', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,     { key: 'amount', label: '使用量', type: 'text' },,     { key: 'unit', label: '单位', type: 'text' },,   ] },
-    { key: 'generatorFuel', label: '发电机燃料', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,     { key: 'amount', label: '使用量', type: 'text' },,     { key: 'unit', label: '单位', type: 'text' },,   ] },
-    { key: 'canteenFuel', label: '食堂炉灶燃料', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,     { key: 'amount', label: '使用量', type: 'text' },,     { key: 'unit', label: '单位', type: 'text' },,   ] },
-    { key: 'forkliftFuel', label: '厂内转运叉车燃料', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,     { key: 'amount', label: '使用量', type: 'text' },,     { key: 'unit', label: '单位', type: 'text' },,   ] },
-    { key: 'commercialVehicle92', label: '自有商务车92#', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,   ] },
-    { key: 'commercialVehicle95', label: '自有商务车95#', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,   ] },
-    { key: 'commercialVehicle98', label: '自有商务车98#', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,   ] },
-    { key: 'roadVehicleDiesel', label: '自有道路车辆燃料-柴油', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,   ] },
-    { key: 'weldingFuel', label: '切割、焊接燃料', type: 'multi-row', fields: [,     { key: 'fuelType', label: '燃料类型', type: 'text' },,   ] },
+    { key: 'boilerFuel', label: '生产用锅炉燃料', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' },
+      { key: 'amount', label: '使用量', type: 'text' },
+      { key: 'unit', label: '单位', type: 'text' },
+      { key: 'measuredCalorific', label: '实测热值', type: 'text' },
+      { key: 'calorificUnit', label: '热值单位', type: 'text' }
+    ] },
+    { key: 'wasteIncineratorFuel', label: '专用废气焚烧炉燃料', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' },
+      { key: 'amount', label: '使用量', type: 'text' },
+      { key: 'unit', label: '单位', type: 'text' }
+    ] },
+    { key: 'hazardousWasteBurnerFuel', label: '危废焚烧炉燃料', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' },
+      { key: 'amount', label: '使用量', type: 'text' },
+      { key: 'unit', label: '单位', type: 'text' }
+    ] },
+    { key: 'generatorFuel', label: '发电机燃料', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' },
+      { key: 'amount', label: '使用量', type: 'text' },
+      { key: 'unit', label: '单位', type: 'text' }
+    ] },
+    { key: 'canteenFuel', label: '食堂炉灶燃料', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' },
+      { key: 'amount', label: '使用量', type: 'text' },
+      { key: 'unit', label: '单位', type: 'text' }
+    ] },
+    { key: 'forkliftFuel', label: '厂内转运叉车燃料', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' },
+      { key: 'amount', label: '使用量', type: 'text' },
+      { key: 'unit', label: '单位', type: 'text' }
+    ] },
+    { key: 'commercialVehicle92', label: '自有商务车92#', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' }
+    ] },
+    { key: 'commercialVehicle95', label: '自有商务车95#', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' }
+    ] },
+    { key: 'commercialVehicle98', label: '自有商务车98#', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' }
+    ] },
+    { key: 'roadVehicleDiesel', label: '自有道路车辆燃料-柴油', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' }
+    ] },
+    { key: 'weldingFuel', label: '切割、焊接燃料', type: 'multi-row', fields: [
+      { key: 'fuelType', label: '燃料类型', type: 'text' }
+    ] },
   ],
   4: [
     { key: 'totalElectricityMeasurable', label: '全厂用电', type: 'select', options: ['可单独统计', '不可单独统计'] },
@@ -100,8 +136,16 @@ export const SECTION_FIELDS: { [section: number]: FieldDef[] } = {
     { key: 'unitConsumptionSteamAmount', label: '单耗蒸汽量', type: 'text' },
   ],
   5: [
-    { key: 'airConditioners', label: '空调制冷剂', type: 'multi-row', fields: [,     { key: 'equipmentName', label: '设备名称', type: 'text' },,     { key: 'refrigerantNo', label: '标号', type: 'text' },,     { key: 'fillAmount', label: '填充量', type: 'text' },,   ] },
-    { key: 'freezers', label: '冷冻机制冷剂', type: 'multi-row', fields: [,     { key: 'equipmentName', label: '设备名称', type: 'text' },,     { key: 'refrigerantNo', label: '标号', type: 'text' },,     { key: 'fillAmount', label: '填充量', type: 'text' },,   ] },
+    { key: 'airConditioners', label: '空调制冷剂', type: 'multi-row', fields: [
+      { key: 'equipmentName', label: '设备名称', type: 'text' },
+      { key: 'refrigerantNo', label: '标号', type: 'text' },
+      { key: 'fillAmount', label: '填充量', type: 'text' }
+    ] },
+    { key: 'freezers', label: '冷冻机制冷剂', type: 'multi-row', fields: [
+      { key: 'equipmentName', label: '设备名称', type: 'text' },
+      { key: 'refrigerantNo', label: '标号', type: 'text' },
+      { key: 'fillAmount', label: '填充量', type: 'text' }
+    ] },
   ],
   6: [
     { key: 'co2Extinguisher', label: 'CO2灭火器填充总量', type: 'text' },
@@ -131,8 +175,18 @@ export const SECTION_FIELDS: { [section: number]: FieldDef[] } = {
   ],
   8: [
     { key: 'productionProcess', label: 'PCF核算目标产品生产工艺流程文字描述', type: 'text' },
-    { key: 'rawMaterials', label: '原材料', type: 'multi-row', fields: [,     { key: 'name', label: '名称', type: 'text' },,     { key: 'spec', label: '规格', type: 'text' },,     { key: 'amount', label: '使用量', type: 'text' },,     { key: 'unit', label: '单位', type: 'text' },,   ] },
-    { key: 'suppliers', label: '供应商', type: 'multi-row', fields: [,     { key: 'name', label: '名称', type: 'text' },,     { key: 'category', label: '品类', type: 'text' },,     { key: 'transportMode', label: '运输方式', type: 'text' },,     { key: 'transportDistance', label: '运距', type: 'text' },,   ] },
+    { key: 'rawMaterials', label: '原材料', type: 'multi-row', fields: [
+      { key: 'name', label: '名称', type: 'text' },
+      { key: 'spec', label: '规格', type: 'text' },
+      { key: 'amount', label: '使用量', type: 'text' },
+      { key: 'unit', label: '单位', type: 'text' }
+    ] },
+    { key: 'suppliers', label: '供应商', type: 'multi-row', fields: [
+      { key: 'name', label: '名称', type: 'text' },
+      { key: 'category', label: '品类', type: 'text' },
+      { key: 'transportMode', label: '运输方式', type: 'text' },
+      { key: 'transportDistance', label: '运距', type: 'text' }
+    ] },
   ],
   9: [
     { key: 'freshWater', label: '新鲜水', type: 'nested' },

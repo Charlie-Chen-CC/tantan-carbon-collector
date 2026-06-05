@@ -22,6 +22,9 @@ tests/
 │   ├── rag/
 │   │   ├── test_retriever.py          # RAGSearcher 无静默 fallback
 │   │   └── test_retrieval_quality.py  # top1 命中 + 排序 + 边界
+│   ├── scripts/
+│   │   └── test_codegen_output_validity.py  # codegen 守门三件套 (P0-7)
+│   ├── test_codegen_field_schema.py  # SSOT JSON 结构 + codegen --check (Phase 6.3)
 │   └── utils/
 └── CLAUDE.md
 ```
@@ -86,6 +89,14 @@ python -m pytest tantan/backend/tests --cov=tantan.backend --cov-report=term-mis
 - **test_section_options.py** (15 cases) - Section 1-9 提示词反硬编码注入断言（Phase 6.1）
 - **test_codegen_field_schema.py** (13 cases) - SSOT JSON 结构 + codegen --check + 关键字段断言（Phase 6.3）
 
+### Phase 6.4 补强 - P0-7 codegen 输出合法性
+- **test_codegen_output_validity.py** (5 cases) - codegen 重新生成 4 目标文件 + 守门三件套：
+  1. `[, ` / `, ,` broken TS 数组模式检测
+  2. multi-row 字段 `fields:` 数组紧凑格式断言
+  3. `codegen --check` 自反一致性
+  4. typescript AST 解析（用 `ts.createSourceFile` 跑 `parseDiagnostics`）
+  5. `sectionConfig.ts` 写入存在性
+
 ### 总数
 - 之前：62 tests
 - Phase 4：109 tests（+47）
@@ -95,7 +106,8 @@ python -m pytest tantan/backend/tests --cov=tantan.backend --cov-report=term-mis
 - Phase 5.7：141 tests（+11）
 - Phase 5.8：156 tests（+15）
 - Phase 6.1：171 tests（+15）
-- Phase 6.3：**184 tests**（+13）
+- Phase 6.3：184 tests（+13）
+- Phase 6.4：**189 tests**（+5）
 
 ## 注意事项
 
