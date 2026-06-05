@@ -7,7 +7,7 @@ import json
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import StreamingResponse
 from sse_starlette.sse import ServerSentEvent
 
@@ -17,6 +17,7 @@ from tantan.backend.api.auth import get_current_user
 from tantan.backend.models.database import User
 from tantan.backend.state.database_manager import DatabaseStateManager
 from tantan.backend.utils import log_exception
+from tantan.backend.utils.exceptions import AppException, ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,19 @@ async def extract_section(
     """提取文件中的部分数据"""
     try:
         if not 1 <= section <= 9:
-            raise HTTPException(status_code=400, detail="无效的部分编号（1-9）")
+            raise AppException(
+                ErrorCode.SESSION_INVALID_SECTION,
+                "无效的部分编号（1-9）",
+                status_code=400,
+            )
 
         session_data = state_manager.get_session(current_user.id, session_id)
         if not session_data:
-            raise HTTPException(status_code=404, detail="会话不存在")
+            raise AppException(
+                ErrorCode.SESSION_NOT_FOUND,
+                "会话不存在",
+                status_code=404,
+            )
 
         content = await file.read()
 
@@ -46,7 +55,11 @@ async def extract_section(
         result = extractor.process(content, filename=file.filename)
 
         if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
+            raise AppException(
+                ErrorCode.EXTRACTION_FAILED,
+                result["error"],
+                status_code=400,
+            )
 
         if result["status"] == "completed":
             filler = FormFillAgent(section)
@@ -62,12 +75,21 @@ async def extract_section(
                 "errors": fill_result.get("errors", [])
             }
 
-        raise HTTPException(status_code=400, detail="文件提取失败")
-    except HTTPException:
+        raise AppException(
+            ErrorCode.EXTRACTION_FAILED,
+            "文件提取失败",
+            status_code=400,
+        )
+    except AppException:
         raise
     except Exception as e:
         log_exception(logger, e, {"session_id": session_id, "section": section, "user_id": current_user.user_id, "action": "extract_section"})
-        raise HTTPException(status_code=500, detail=f"文件提取失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "文件提取失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )
 
 
 @router.post("/{session_id}/section/{section}/batch")
@@ -82,7 +104,10 @@ async def extract_batch(
         try:
             session_data = state_manager.get_session(current_user.id, session_id)
             if not session_data:
-                yield ServerSentEvent(event="error", data=json.dumps({"error": "会话不存在"}))
+                yield ServerSentEvent(event="error", data=json.dumps({
+                    "error_code": ErrorCode.SESSION_NOT_FOUND.value,
+                    "user_message": "会话不存在"
+                }))
                 return
 
             total = len(files)
@@ -103,15 +128,8 @@ async def extract_batch(
                     "file_type": f.content_type
                 })
 
-            processed = 0
-            async def progress_callback(p, t):
-                yield ServerSentEvent(event="progress", data=json.dumps({
-                    "status": "processing",
-                    "processed": p,
-                    "total": t,
-                    "current_file": files[p-1].filename if p <= total else ""
-                }))
-
+            # 注：P0-4 batch SSE 假流式修复见 fix/phase1-p0-4-batch-sse 分支，
+            # 本次 P0-1 只做异常体系切换。progress_callback 仍是死代码，会在 P0-4 一并修。
             result = await processor.process_batch(file_list)
 
             yield ServerSentEvent(event="complete", data=json.dumps({
@@ -122,8 +140,12 @@ async def extract_batch(
             }))
 
         except Exception as e:
-            logger.error(f"批量提取失败: {e}")
-            yield ServerSentEvent(event="error", data=json.dumps({"error": str(e)}))
+            # SSE error 事件也走 user_message，不暴露 str(e)
+            logger.error(f"批量提取失败: {e}", exc_info=True)
+            yield ServerSentEvent(event="error", data=json.dumps({
+                "error_code": ErrorCode.INTERNAL_ERROR.value,
+                "user_message": "批量提取失败，请稍后重试"
+            }))
 
     return StreamingResponse(
         event_generator(),

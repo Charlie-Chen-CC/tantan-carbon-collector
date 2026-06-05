@@ -4,12 +4,13 @@
 """
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from tantan.backend.api.auth import get_current_user
 from tantan.backend.models.database import User
 from tantan.backend.state.database_manager import DatabaseStateManager
 from tantan.backend.utils import log_exception
+from tantan.backend.utils.exceptions import AppException, ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,11 @@ async def get_history(
         session_data = state_manager.get_session(current_user.id, session_id)
 
         if not session_data:
-            raise HTTPException(status_code=404, detail="会话不存在")
+            raise AppException(
+                ErrorCode.SESSION_NOT_FOUND,
+                "会话不存在",
+                status_code=404,
+            )
 
         history = state_manager.get_history(current_user.id, session_id, limit)
 
@@ -36,8 +41,13 @@ async def get_history(
             "session_id": session_id,
             "history": history
         }
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         log_exception(logger, e, {"session_id": session_id, "user_id": current_user.user_id, "action": "get_history"})
-        raise HTTPException(status_code=500, detail=f"获取历史失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "获取历史失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )

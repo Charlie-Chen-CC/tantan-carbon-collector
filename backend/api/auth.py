@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import redis
-from fastapi import APIRouter, HTTPException, Depends, Response, Cookie, Request
+from fastapi import APIRouter, Depends, Response, Cookie, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from tantan.backend.models.database import User, get_db
 from tantan.backend.config import get_config
 from tantan.backend.utils import limit_auth
+from tantan.backend.utils.exceptions import AppException, ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -153,21 +154,37 @@ def get_current_user(
     旧 Bearer Token 方式已废弃：前端不再写 Authorization 头，统一靠浏览器自动携带 httpOnly Cookie。
     """
     if not auth_token:
-        raise HTTPException(status_code=401, detail="未登录或Token已过期")
+        raise AppException(
+            ErrorCode.AUTH_REQUIRED,
+            "未登录或Token已过期",
+            status_code=401,
+        )
 
     token_data = verify_token(auth_token)
     if not token_data:
         # Token已过期或无效，清除cookie
         response.delete_cookie(key=AUTH_COOKIE_NAME, path="/")
-        raise HTTPException(status_code=401, detail="Token已过期，请重新登录")
+        raise AppException(
+            ErrorCode.AUTH_TOKEN_EXPIRED,
+            "Token已过期，请重新登录",
+            status_code=401,
+        )
 
     user = db.query(User).filter(User.id == token_data["user_id"]).first()
     if not user:
         response.delete_cookie(key=AUTH_COOKIE_NAME, path="/")
-        raise HTTPException(status_code=401, detail="用户不存在")
+        raise AppException(
+            ErrorCode.AUTH_INVALID_CREDENTIALS,
+            "用户不存在",
+            status_code=401,
+        )
 
     if not user.is_active:
-        raise HTTPException(status_code=401, detail="用户已被禁用")
+        raise AppException(
+            ErrorCode.AUTH_USER_DISABLED,
+            "用户已被禁用",
+            status_code=401,
+        )
 
     return user
 
@@ -188,7 +205,11 @@ async def register(body: RegisterRequest, request: Request, response: Response, 
     # 检查用户名是否已存在
     existing = db.query(User).filter(User.username == body.username).first()
     if existing:
-        raise HTTPException(status_code=400, detail="用户名已存在")
+        raise AppException(
+            ErrorCode.INVALID_REQUEST,
+            "用户名已存在",
+            status_code=400,
+        )
 
     # 创建用户
     user = User(
@@ -236,13 +257,25 @@ async def login(body: LoginRequest, request: Request, response: Response, db: Se
     user = db.query(User).filter(User.username == body.username).first()
 
     if not user:
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        raise AppException(
+            ErrorCode.AUTH_INVALID_CREDENTIALS,
+            "用户名或密码错误",
+            status_code=401,
+        )
 
     if not User.verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        raise AppException(
+            ErrorCode.AUTH_INVALID_CREDENTIALS,
+            "用户名或密码错误",
+            status_code=401,
+        )
 
     if not user.is_active:
-        raise HTTPException(status_code=401, detail="用户已被禁用")
+        raise AppException(
+            ErrorCode.AUTH_USER_DISABLED,
+            "用户已被禁用",
+            status_code=401,
+        )
 
     # 更新最后登录时间
     user.last_login_at = datetime.now()
