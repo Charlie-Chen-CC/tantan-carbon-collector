@@ -175,3 +175,20 @@ async def login(...):
 - 触发限流：返回 **429 + Retry-After 头**
 - 多 worker 部署需切 Redis storage：`_limiter = Limiter(..., storage_uri="redis://...")`
 - 缺包时 noop：装饰器直接返回原函数，setup 跳过
+
+## async_bridge - 同步→异步桥接器（P0-2a 新建）
+
+`bridge_sync_iter(sync_iter_factory)` 把同步 iterable（generator）桥接到 async iterator。
+
+### 用途
+- 把 dashscope 流式响应、QA Agent sync stream 等同步生成器无缝集成到 FastAPI async def 路由 / SSE 协议
+- 让 `async def chat_stream` 真异步消费（不阻塞 event loop）
+
+### 实现
+- 后台 `threading.Thread(daemon=True)` 跑 sync iterable
+- 主协程通过 `asyncio.Queue` 异步消费
+- 异常（任何 `BaseException`）跨线程 propagate 到 async 端
+
+### 共用者
+- P0-2a (LLM async) — `AliLLMClient.achat_stream`
+- P0-2c (QA Agent async) — `QAAgent.agenerate_response_stream`（规划中）
