@@ -2,13 +2,16 @@
 阿里云 DashScope LLM/Embedding 客户端 - 碳管师收资系统
 Phase 2.6：直接用 dashscope SDK，不再走 LangChain 三层包装。
 
-原 LangChain 包装（langchain_llm.py）已删除，逻辑全部内联于此。
+P0-2a (2026-06): 新增 async 方法 (achat / achat_stream / aencode / aencode_single)
+解 FastAPI 路由同步阻塞 event loop 问题。
 """
+import asyncio
 import json
-from typing import Dict, Any, Optional, List, Iterator, Union
+from typing import Dict, Any, Optional, List, Iterator, Union, AsyncIterator
 
 from tantan.backend.config import get_config
 from tantan.backend.utils import get_logger
+from tantan.backend.utils.async_bridge import bridge_sync_iter
 
 logger = get_logger(__name__)
 
@@ -126,6 +129,30 @@ class AliLLMClient:
             content = m.get("content", "")
             normalized.append({"role": role, "content": content})
         return self._call(normalized, stream=stream, **kwargs)
+
+    async def achat(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """异步非流式 chat。内部 to_thread 调 self.chat (stream=False)。"""
+        return await asyncio.to_thread(self.chat, messages, stream=False, **kwargs)
+
+    async def achat_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """异步流式 chat。bridge sync _stream_call → async iterator。
+
+        用 utils.async_bridge.bridge_sync_iter 把 dashscope sync generator
+        桥到 async iterator, 让 FastAPI SSE 路由能真正异步消费。
+        """
+        def _make_iter():
+            return self.chat(messages, stream=True, **kwargs)
+
+        async for chunk in bridge_sync_iter(_make_iter):
+            yield chunk
 
     def count_tokens(self, text: str) -> int:
         """估算 token 数量"""
