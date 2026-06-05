@@ -27,6 +27,37 @@
 - `CarbonKnowledgeBase` - 高级封装，提供 `add_knowledge` / `query` / `retrieve` / `query_with_context`
 - `RAGRetriever` - 底层检索器，组合 `AliEmbeddingModel` + `VectorStore`
 
+### P0-2a 异步入口（2026-06 新增, 推荐新代码使用）
+- `AliLLMClient.achat(messages, **kwargs)` - 异步非流式 chat, `asyncio.to_thread` 包装
+- `AliLLMClient.achat_stream(messages, **kwargs)` - 异步流式 chat, 通过 `bridge_sync_iter` 桥接 sync generator
+- `AliEmbeddingClient.aencode(texts, model=None)` - 异步批量嵌入
+- `AliEmbeddingClient.aencode_single(text)` - 异步单文本嵌入
+- **新旧并存**: 旧 `chat` / `generate` / `encode` / `encode_single` sync 方法**保留** (向后兼容)
+- **红线**: async def 内部必有 `await` (AST 守门测试 `test_all_async_methods_have_await` 强制)
+
+### P0-2b Vector DB + RAG 异步化 (2026-06 新增)
+
+**3 个 VectorDB client + knowledge_base 4 类 + RAGSearcher / RAGPipeline** 加 async 方法。
+**全 `asyncio.to_thread` 包装同步方法** (用户决策, 匹配 P0-2a 模式)。
+原因: `pymilvus` / `qdrant-client` / `asyncpg` 不在 `requirements.txt`, spec §3 写的"原生 async SDK"
+是理论路径实际跑不起来。统一走 thread pool, 简单可测无新依赖。
+
+**async 方法清单 (22 个)**:
+- `MilvusClient / QdrantClient / PGVectorClient`: `asearch / ainsert / adelete` (各 3 个, 共 9)
+- `AliEmbeddingModel.aencode` — `await embedding_client.aencode` (P0-2a)
+- `VectorStore.asearch / aadd / aadd_batch / adelete`
+- `RAGRetriever.aretrieve / aadd_knowledge / aadd_knowledge_batch`
+- `CarbonKnowledgeBase.aquery / aquery_with_context`
+- `RAGSearcher.asearch` (内部优先走 `vectorstore.asimilarity_search_with_score`, fallback `to_thread`)
+- `_KnowledgeBaseVectorStoreAdapter.asimilarity_search_with_score` — `await knowledge_base.aquery`
+- `RAGPipeline.aanswer / aanswer_stream` (await 链: `searcher.asearch` + `llm_client.achat` / `achat_stream`)
+
+**AST 守门**: 3 个测试扫 `vector_db.py` / `knowledge_base.py` / `retriever.py`, 所有 `ast.AsyncFunctionDef`
+内部必须含 `ast.Await/ast.AsyncFor/ast.AsyncWith` 至少一个。
+
+**spec §3 偏差**: 原 spec 说 Milvus/Qdrant/PGVector 走"原生 async SDK"。本 PR 走 `asyncio.to_thread`,
+等 Milvus/Qdrant/asyncpg 真要生产时再切 (单独 PR, YAGNI)。
+
 ## API 调用
 
 ```python

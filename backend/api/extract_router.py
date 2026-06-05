@@ -59,7 +59,7 @@ async def extract_section(
         extractor = FileExtractAgent(section)
         result = extractor.process(content, filename=file.filename)
 
-        if "error" in result:
+        if result.get("error"):
             # 把 result 完整内容打到日志（status/error/data keys），便于排查
             logger.warning(
                 f"[extract] FileExtractAgent 返回 error: "

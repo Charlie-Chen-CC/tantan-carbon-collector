@@ -4,8 +4,12 @@ Phase 2.6：移除 LangChain LCEL 包装，直接用 ali_llm + knowledge_base �
 
 S3.5 修复：search() 不再有静默 fallback（score=0.0 静默失效），
 若 vectorstore 不支持带分数搜索，直接抛错。
+
+P0-2b (2026-06): 加 RAGSearcher.asearch + RAGPipeline.aanswer/aanswer_stream。
+全 await 链到 P0-2a 的 achat/achat_stream / P0-2b 的 knowledge_base.aretrieve。
 """
-from typing import List, Dict, Any, Optional, Union, Iterator
+import asyncio
+from typing import List, Dict, Any, Optional, Union, Iterator, AsyncIterator
 
 from tantan.backend.rag.ali_llm import get_llm_client
 from tantan.backend.rag.knowledge_base import get_knowledge_base, CarbonKnowledgeBase
@@ -65,6 +69,28 @@ class RAGSearcher:
         S3.5：vectorstore 不支持 similarity_search_with_score 时直接抛错，不静默 fallback。
         """
         docs_with_scores = self.vectorstore.similarity_search_with_score(query, k=top_k)
+        return [
+            RAGSearchResult(
+                chunk_id=doc.metadata.get("chunk_id", ""),
+                content=doc.page_content,
+                metadata=doc.metadata,
+                score=score,
+            )
+            for doc, score in docs_with_scores
+        ]
+
+    async def asearch(self, query: str, top_k: int = 5) -> List[RAGSearchResult]:
+        """异步搜索 (P0-2b)。
+
+        vectorstore 优先用 `asimilarity_search_with_score`（P0-2b 知识库适配器已加）,
+        否则 fallback 到 `asyncio.to_thread(self.search, ...)`。
+        """
+        if hasattr(self.vectorstore, "asimilarity_search_with_score"):
+            docs_with_scores = await self.vectorstore.asimilarity_search_with_score(
+                query, k=top_k
+            )
+        else:
+            docs_with_scores = await asyncio.to_thread(self.search, query, top_k)
         return [
             RAGSearchResult(
                 chunk_id=doc.metadata.get("chunk_id", ""),
@@ -136,6 +162,16 @@ class _KnowledgeBaseVectorStoreAdapter:
     def similarity_search_with_score(self, query: str, k: int = 5) -> List[tuple[Document, float]]:
         """调 knowledge_base.retrieve()，返回 (Document, score) 列表"""
         raw = self.knowledge_base.retrieve(query, top_k=k)
+        return [
+            (Document(page_content=r.get("content", ""), metadata=r.get("metadata", {})), r.get("score", 0.0))
+            for r in raw
+        ]
+
+    async def asimilarity_search_with_score(
+        self, query: str, k: int = 5,
+    ) -> List[tuple[Document, float]]:
+        """异步版 (P0-2b)。await knowledge_base.aretrieve。"""
+        raw = await self.knowledge_base.aquery(query, top_k=k)
         return [
             (Document(page_content=r.get("content", ""), metadata=r.get("metadata", {})), r.get("score", 0.0))
             for r in raw
@@ -242,6 +278,64 @@ class RAGPipeline:
                     yield str(chunk)
         except Exception as e:
             logger.error(f"RAG 流式生成失败: question={question}, error: {e}", exc_info=True)
+            yield f"抱歉，生成回答时出现错误：{e}"
+
+    async def _aretrieve(self, question: str, top_k: int = 5) -> List[RAGSearchResult]:
+        """异步检索 (P0-2b)。"""
+        return await self.searcher.asearch(question, top_k=top_k)
+
+    async def aanswer(
+        self,
+        question: str,
+        context: Optional[Dict[str, Any]] = None,
+        include_sources: bool = False,
+    ) -> Dict[str, Any]:
+        """异步非流式回答 (P0-2b)。await 链: searcher.asearch + llm_client.achat。"""
+        try:
+            results = await self._aretrieve(question, top_k=5)
+            prompt = self._build_prompt(question, results)
+            messages = [
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ]
+            resp = await self.llm_client.achat(messages)
+            answer_text = resp.get("content", "") if isinstance(resp, dict) else str(resp)
+
+            result: Dict[str, Any] = {"answer": answer_text, "question": question}
+            if include_sources:
+                result["sources"] = [
+                    {
+                        "topic": r.metadata.get("topic", "未知"),
+                        "source": r.metadata.get("source", "未知"),
+                        "score": r.score,
+                    }
+                    for r in results
+                ]
+            return result
+        except Exception as e:
+            logger.error(f"异步 RAG 管道执行失败: question={question}, error: {e}", exc_info=True)
+            return {"answer": "抱歉，生成回答时出现错误。", "error": str(e), "question": question}
+
+    async def aanswer_stream(
+        self,
+        question: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> "AsyncIterator[str]":
+        """异步流式回答 (P0-2b)。await 链: searcher.asearch + async for llm_client.achat_stream。"""
+        try:
+            results = await self._aretrieve(question, top_k=5)
+            prompt = self._build_prompt(question, results)
+            messages = [
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ]
+            async for chunk in self.llm_client.achat_stream(messages):
+                if isinstance(chunk, dict):
+                    yield chunk.get("content", "")
+                else:
+                    yield str(chunk)
+        except Exception as e:
+            logger.error(f"异步 RAG 流式失败: question={question}, error: {e}", exc_info=True)
             yield f"抱歉，生成回答时出现错误：{e}"
 
 

@@ -42,6 +42,15 @@ class AliEmbeddingModel(EmbeddingModel):
 
         raise ValueError(f"Failed to encode texts: {result}")
 
+    async def aencode(self, texts: List[str]) -> List[List[float]]:
+        """异步编码 (P0-2b)。内部 await embedding_client.aencode (P0-2a)。"""
+        result = await self.embedding_client.aencode(texts)
+
+        if "embeddings" in result and result["embeddings"]:
+            return result["embeddings"]
+
+        raise ValueError(f"Failed to encode texts: {result}")
+
 
 class VectorStore:
     """向量存储"""
@@ -140,6 +149,56 @@ class VectorStore:
         # 简化实现
         return 0
 
+    async def asearch(self, query_vector: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
+        """异步搜索 (P0-2b)。"""
+        try:
+            return await self.vector_db_client.asearch(
+                self.collection_name, query_vector, top_k
+            )
+        except Exception as e:
+            logger.error(f"异步搜索失败: error: {str(e)}", exc_info=True)
+            return []
+
+    async def aadd(self, doc_id: str, vector: List[float], document: Dict[str, Any]) -> bool:
+        """异步添加文档 (P0-2b)。"""
+        try:
+            await self.vector_db_client.ainsert(
+                self.collection_name,
+                [vector],
+                [document],
+                [doc_id],
+            )
+            return True
+        except Exception as e:
+            logger.error(f"异步添加文档失败: error: {str(e)}", exc_info=True)
+            return False
+
+    async def aadd_batch(
+        self,
+        vectors: List[List[float]],
+        documents: List[Dict[str, Any]],
+        ids: Optional[List[str]] = None,
+    ) -> List[str]:
+        """异步批量添加文档 (P0-2b)。"""
+        if ids is None:
+            ids = [str(uuid.uuid4()) for _ in range(len(vectors))]
+
+        try:
+            return await self.vector_db_client.ainsert(
+                self.collection_name, vectors, documents, ids
+            )
+        except Exception as e:
+            logger.error(f"异步批量添加文档失败: count={len(documents)}, error: {str(e)}", exc_info=True)
+            return []
+
+    async def adelete(self, doc_id: str) -> bool:
+        """异步删除文档 (P0-2b)。"""
+        try:
+            return await self.vector_db_client.adelete(self.collection_name, [doc_id])
+        except Exception as e:
+            logger.error(f"异步删除文档失败: doc_id={doc_id}, error: {str(e)}", exc_info=True)
+            return False
+
 
 class KnowledgeChunk:
     """知识块"""
@@ -213,6 +272,24 @@ class RAGRetriever:
 
         return chunk_id
 
+    async def aadd_knowledge(self, content: str, metadata: Dict[str, Any]) -> str:
+        """异步添加知识 (P0-2b)。"""
+        if not self._ensure_initialized():
+            return ""
+
+        chunk_id = str(uuid.uuid4())
+
+        chunk = KnowledgeChunk(chunk_id, content, metadata)
+        self.chunks[chunk_id] = chunk
+
+        try:
+            vectors = await self.embedding_model.aencode([content])
+            await self.vector_store.aadd(chunk_id, vectors[0], chunk.to_dict())
+        except Exception as e:
+            logger.error(f"异步添加知识失败: error: {str(e)}", exc_info=True)
+
+        return chunk_id
+
     def add_knowledge_batch(self, knowledge_list: List[Dict[str, Any]]) -> List[str]:
         """批量添加知识"""
         if not self._ensure_initialized():
@@ -241,6 +318,31 @@ class RAGRetriever:
 
         return chunk_ids
 
+    async def aadd_knowledge_batch(self, knowledge_list: List[Dict[str, Any]]) -> List[str]:
+        """异步批量添加知识 (P0-2b)。"""
+        if not self._ensure_initialized():
+            return []
+
+        chunk_ids = []
+        contents = []
+        documents = []
+
+        for item in knowledge_list:
+            chunk_id = str(uuid.uuid4())
+            chunk = KnowledgeChunk(chunk_id, item["content"], item.get("metadata", {}))
+            self.chunks[chunk_id] = chunk
+            chunk_ids.append(chunk_id)
+            contents.append(item["content"])
+            documents.append(chunk.to_dict())
+
+        try:
+            vectors = await self.embedding_model.aencode(contents)
+            await self.vector_store.aadd_batch(vectors, documents, chunk_ids)
+        except Exception as e:
+            logger.error(f"异步批量添加知识失败: count={len(chunk_ids)}, error: {str(e)}", exc_info=True)
+
+        return chunk_ids
+
     def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """检索知识"""
         if not self._ensure_initialized():
@@ -266,6 +368,33 @@ class RAGRetriever:
 
         except Exception as e:
             logger.error(f"检索知识失败: query={query}, error: {str(e)}", exc_info=True)
+            return []
+
+    async def aretrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """异步检索知识 (P0-2b)。"""
+        if not self._ensure_initialized():
+            return []
+
+        try:
+            # 异步计算查询向量
+            vectors = await self.embedding_model.aencode([query])
+            query_vector = vectors[0]
+
+            # 异步搜索
+            results = await self.vector_store.asearch(query_vector, top_k)
+
+            # 更新访问记录
+            for result in results:
+                chunk_id = result.get("id", "")
+                if chunk_id in self.chunks:
+                    chunk = self.chunks[chunk_id]
+                    chunk.accessed_at = datetime.now()
+                    chunk.access_count += 1
+
+            return results
+
+        except Exception as e:
+            logger.error(f"异步检索知识失败: query={query}, error: {str(e)}", exc_info=True)
             return []
 
     def retrieve_with_rerank(self, query: str, top_k: int = 5, rerank_top: int = 3) -> List[Dict[str, Any]]:
@@ -500,6 +629,11 @@ class CarbonKnowledgeBase:
         retriever = self._get_retriever()
         return retriever.retrieve(question, top_k)
 
+    async def aquery(self, question: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """异步查询知识库 (P0-2b)。"""
+        retriever = self._get_retriever()
+        return await retriever.aretrieve(question, top_k)
+
     def query_with_context(self, question: str, context: Optional[Dict[str, Any]] = None, top_k: int = 3) -> str:
         """带上下文的知识库查询"""
         retriever = self._get_retriever()
@@ -529,6 +663,41 @@ class CarbonKnowledgeBase:
             return "抱歉，我在知识库中没有找到相关信息，建议查阅国家标准或咨询专业人士。"
 
         # 生成回答
+        context_knowledge = "\n\n".join([
+            f"【{r.get('metadata', {}).get('topic', '未知')}】\n{r.get('content', '')}"
+            for r in results
+        ])
+
+        return f"根据碳排放相关知识库，我为您提供以下信息：\n\n{context_knowledge}\n\n如果您需要更详细的解答，请告诉我具体是哪个方面。"
+
+    async def aquery_with_context(
+        self, question: str, context: Optional[Dict[str, Any]] = None, top_k: int = 3,
+    ) -> str:
+        """异步带上下文的知识库查询 (P0-2b)。"""
+        retriever = self._get_retriever()
+
+        enhanced_query = question
+        if context and context.get("current_section"):
+            section_map = {
+                1: "基本信息 企业",
+                2: "产品 碳足迹 PCF",
+                3: "燃料 燃烧 排放",
+                4: "电力 热力 蒸汽",
+                5: "制冷剂 逸散 GWP",
+                6: "逸散 排放 CO2",
+                7: "废水 废气 危废",
+                8: "原材料 供应商",
+                9: "耗材 新鲜水",
+            }
+            section_keyword = section_map.get(context["current_section"], "")
+            if section_keyword:
+                enhanced_query = f"{question} {section_keyword}"
+
+        results = await retriever.aretrieve(enhanced_query, top_k)
+
+        if not results:
+            return "抱歉，我在知识库中没有找到相关信息，建议查阅国家标准或咨询专业人士。"
+
         context_knowledge = "\n\n".join([
             f"【{r.get('metadata', {}).get('topic', '未知')}】\n{r.get('content', '')}"
             for r in results
