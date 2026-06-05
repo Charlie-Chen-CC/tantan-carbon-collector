@@ -42,6 +42,19 @@ FastAPI路由器，提供所有HTTP API端点。
 - `POST /api/chat` - 发送消息（非流式）
 - `POST /api/chat/stream` - 流式对话（SSE，**Phase 5.3 真实流式**：LLM token-by-token）
 
+### 文件提取
+- `POST /api/extract/{session_id}/section/{section}` - 提取文件中特定部分数据
+- `POST /api/extract/{session_id}/section/{section}/batch` - 批量提取（**P0-4 真实流式进度**：每文件 yield 一次 progress 事件）
+
+**P0-4 修复说明（2026-06-04）**：
+- 修前 bug：① `progress_callback` 是死代码（原占位注释 "P0-4 batch SSE 假流式修复见..."）；② `yield ServerSentEvent(...)` 直接 yield 对象，StreamingResponse 序列化时抛 `TypeError("encode() takes 1 positional argument but 2 were given")`
+- 修后实现：① 把 `await f.read()` 移到路由函数体（yield 之前），避免 `I/O operation on closed file`；② `progress_callback` 是真 `async def` callable，用 `asyncio.Queue` 桥接到 event_generator；③ 用 `asyncio.create_task(process_batch(...))` 后台跑，主循环 `wait_for(queue.get(), 0.5)` 拉事件 yield；④ 所有 `yield ServerSentEvent(...).encode()` 返回 bytes
+- 事件序列：`started (0/total) → progress(1/total) → ... → progress(total/total) → complete({status, extracted, warnings, failed_files})`，或 catastrophic 异常时 `error({error_code, user_message})`
+- 守门测试：`tests/backend/api/test_batch_sse.py`（6 个测试：3 个事件序列 + 3 个 AST 守门）
+  - `TestBatchSSEProgress` 验证 per-file progress 事件流（mock BatchFileProcessor）
+  - `TestBatchSSEASTGuard` 防止"假流式占位注释"复发、强制 `progress_callback=` 传参、强制 yield `.encode()` bytes
+- 注意：BatchFileProcessor 本身有独立 bug（`_priority_to_group_key` 不映射 'excel' 组 → 纯 xlsx 批次 0 处理），属于另一个 P 级别，不在 P0-4 范围
+
 **Phase 5.3 真实流式说明**：
 - 之前：等 `generate_response()` 整段返回后再按 10 字符切片 yield，user 看到的"流式"是假的
 - 现在：`QAAgent.generate_response_stream()` 同步生成器，事件序列 `intent → message(×N) → done`
@@ -92,6 +105,7 @@ class ModifyRequest(BaseModel):
 - **真实 MIME 探测**：使用 `python-magic` (即 `python-magic-bin==0.4.14` Windows 平台二进制) 读取文件前 2KB 探测真实 MIME
 - **扩展名 ↔ MIME 双向校验**：`EXT_TO_MIMES` 字典维护每个扩展名对应的真实 MIME 白名单，防止「扩展名白名单 + 实际内容是 PE 可执行文件」的攻击
 - **UUID 文件名重写**：上传文件用 `uuid.uuid4().hex` 重新命名，丢弃客户端原始文件名（防止路径遍历 + 防止泄露用户隐私）
+- **P0-3 修复（2026-06-04）**：上传路径用 `f"{file_id}_{ext}"`（带 `_` 前缀）匹配下载 `filename.startswith(file_id + "_")` 约定。重构前 06-03 引入 1 行 bug 导致 GET /api/files/{file_id} 永远 404。回归测试：`test_files.py::TestUpload::test_upload_then_download_roundtrip`
 
 ## 日志
 
@@ -101,7 +115,7 @@ class ModifyRequest(BaseModel):
 - 对话消息 (`/api/chat`)
 - 修改操作 (`/api/modify/{session_id}`)
 
-## 错误处理（S3.12 统一体系）
+## 错误处理（S3.12 统一体系 / P0-1 完成 2026-06-04）
 
 - 旧散乱 `return {"error": str(e)}` / `HTTPException(400, str(e))` **已废弃**
 - 新体系：`AppException(ErrorCode, user_message, developer_message)` 详见 `tantan/backend/utils/exceptions.py`
@@ -109,3 +123,60 @@ class ModifyRequest(BaseModel):
 - 全局 `@app.exception_handler(Exception)` 兜底：未捕获异常统一返回 `{error_code: INTERNAL_ERROR, user_message: "服务暂时不可用"}`，绝不向客户端泄露堆栈/SQL/路径
 - 前端 `services/api.ts` 拦截器把 `user_message` 挂到 error 对象 (`error.appUserMessage`)，业务层 catch 时可直接 `message.error(err.appUserMessage)`
 - 新增业务异常时：先在 `ErrorCode` 枚举加值，再 `raise AppException(ErrorCode.X, user_msg)`，不要直接 raise HTTPException
+- 全部 8 个 router 文件（auth/chat/extract/files/form/history/sessions/validation）已 100% 切换到 `AppException`（P0-1 修复 2026-06-04）
+- AST 守门测试：`tantan/backend/tests/backend/api/test_exceptions.py`
+  - `TestRoutersUseAppException::test_no_http_exception_in_router` 8 个文件 0 HTTPException
+  - `TestNoStrELeakInRaises::test_no_str_call_in_user_visible_params` 8 个文件 user_message/detail 不含 `str(...)`
+  - `TestAppExceptionResponseShape` 验证响应体不含 `developer_message`
+
+### 4xx 错误码使用规范
+
+| 错误码 | 用途 | 示例 |
+|--------|------|------|
+| `INVALID_REQUEST` | 通用 400 | "用户名已存在" |
+| `AUTH_REQUIRED` | 401 未登录 | "未登录或Token已过期" |
+| `AUTH_INVALID_CREDENTIALS` | 401 用户名/密码错 | "用户名或密码错误" |
+| `AUTH_TOKEN_EXPIRED` | 401 Token 过期 | "Token已过期，请重新登录" |
+| `AUTH_USER_DISABLED` | 401 用户被禁 | "用户已被禁用" |
+| `SESSION_NOT_FOUND` | 404 会话不存在 | - |
+| `SESSION_INVALID_SECTION` | 400 section 编号 1-9 之外 | "无效的部分编号（1-9）" |
+| `FILE_TOO_LARGE` | 400 文件超 10MB | - |
+| `UNSUPPORTED_FILE_TYPE` | 400 扩展名不在白名单 | - |
+| `FILE_EMPTY` | 400 空文件 / 读不出 | - |
+| `FILE_CONTENT_MISMATCH` | 400 MIME 与扩展名不符 | - |
+| `FILE_NOT_FOUND` | 404 文件不存在 | - |
+| `EXTRACTION_FAILED` | 400 提取失败 | - |
+| `OPERATION_NOT_ALLOWED` | 403 无权操作 | "无权访问/删除此文件" |
+| `INTERNAL_ERROR` | 500 兜底（必须 `developer_message=str(e)`） | "服务暂时不可用，请稍后重试" |
+
+### 写法示例
+
+```python
+# 4xx - 用户可见错误
+raise AppException(
+    ErrorCode.SESSION_NOT_FOUND,
+    "会话不存在",
+    status_code=404,
+)
+
+# 4xx - 携带额外上下文
+raise AppException(
+    ErrorCode.UNSUPPORTED_FILE_TYPE,
+    f"不支持的文件类型: {ext}，仅支持 xlsx/xls/pdf/docx/doc/pptx/md/png/jpg/jpeg",
+    status_code=400,
+)
+
+# 5xx - 内部错误，dev_msg 写日志
+raise AppException(
+    ErrorCode.INTERNAL_ERROR,
+    "AI响应失败，请稍后重试",
+    status_code=500,
+    developer_message=str(e),  # 仅入日志，绝不返给前端
+)
+
+# SSE error 事件也走 user_message
+yield ServerSentEvent(event="error", data=json.dumps({
+    "error_code": ErrorCode.INTERNAL_ERROR.value,
+    "user_message": "批量提取失败，请稍后重试"
+}))
+```

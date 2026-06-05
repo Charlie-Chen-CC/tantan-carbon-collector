@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sse_starlette.sse import ServerSentEvent
@@ -19,6 +19,7 @@ from tantan.backend.api.auth import get_current_user
 from tantan.backend.models.database import User
 from tantan.backend.state.database_manager import DatabaseStateManager
 from tantan.backend.utils import log_exception, record_chat_stream_chunk
+from tantan.backend.utils.exceptions import AppException, ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,11 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         session_data = state_manager.get_session(current_user.id, request.session_id)
 
         if not session_data:
-            raise HTTPException(status_code=404, detail="会话不存在")
+            raise AppException(
+                ErrorCode.SESSION_NOT_FOUND,
+                "会话不存在",
+                status_code=404,
+            )
 
         qa_agent = QAAgent()
         qa_agent.set_session(request.session_id)
@@ -66,11 +71,16 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         })
 
         return response
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         log_exception(logger, e, {"session_id": request.session_id, "user_id": current_user.user_id, "action": "chat"})
-        raise HTTPException(status_code=500, detail=f"AI响应失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "AI响应失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )
 
 
 @router.post("/chat/stream")
@@ -87,7 +97,11 @@ async def chat_stream(request: ChatRequest, current_user: User = Depends(get_cur
         session_data = state_manager.get_session(current_user.id, request.session_id)
 
         if not session_data:
-            raise HTTPException(status_code=404, detail="会话不存在")
+            raise AppException(
+                ErrorCode.SESSION_NOT_FOUND,
+                "会话不存在",
+                status_code=404,
+            )
 
         qa_agent = QAAgent()
         qa_agent.set_session(request.session_id)
@@ -149,11 +163,16 @@ async def chat_stream(request: ChatRequest, current_user: User = Depends(get_cur
                 "X-Accel-Buffering": "no"
             }
         )
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         log_exception(logger, e, {"session_id": request.session_id, "user_id": current_user.user_id, "action": "chat_stream"})
-        raise HTTPException(status_code=500, detail=f"流式响应失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "流式响应失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )
 
 
 @router.post("/modify/{session_id}")
@@ -167,7 +186,11 @@ async def modify_form(
         session_data = state_manager.get_session(current_user.id, session_id)
 
         if not session_data:
-            raise HTTPException(status_code=404, detail="会话不存在")
+            raise AppException(
+                ErrorCode.SESSION_NOT_FOUND,
+                "会话不存在",
+                status_code=404,
+            )
 
         current_data = state_manager.get_form_data(current_user.id, session_id, request.section)
 
@@ -196,8 +219,13 @@ async def modify_form(
             })
 
         return result
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         log_exception(logger, e, {"session_id": session_id, "user_id": current_user.user_id, "action": "modify_form"})
-        raise HTTPException(status_code=500, detail=f"修改表单失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "修改表单失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )

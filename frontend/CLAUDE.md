@@ -82,6 +82,7 @@ frontend/
 - 旧 `setAuthToken` / `getAuthToken` 保留为 no-op 仅为兼容；调用方应停止使用
 - 401 → 派发 `window.dispatchEvent(new CustomEvent('auth:logout'))` → AuthProvider 收到事件后清空 user state
 - **禁止**再使用 `localStorage` 存 token、**禁止**再手动加 `Authorization` 头
+- **P0-5 修复（2026-06-04）**：`logout()` 和 401 事件监听都会清 `localStorage['ai_conversations']`，避免用户间 AI 对话残留泄露（GDPR / 个保法合规）。回归测试 `frontend/e2e/privacy.spec.ts`。
 
 ## 字段配置
 

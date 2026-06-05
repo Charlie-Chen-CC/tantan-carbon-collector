@@ -1,5 +1,78 @@
 # Progress Log
 
+## Session: 2026-06-04（Phase 4: P0 修复）
+
+### P0-4: batch SSE 假流式 + AST 违规 — **完成**
+- **Status:** complete
+- **Branch:** `fix/phase1-p0-4-batch-sse`
+- **Commit:** pending
+- **改动:**
+  - backend/api/extract_router.py: 重写 extract_batch 端点
+    - 把 `await f.read()` 移到路由函数体（yield 之前）— 修前 `I/O operation on closed file`
+    - `progress_callback` 用 `asyncio.Queue` 桥接 event_generator（真 async callable）
+    - `asyncio.create_task(process_batch(...))` 后台跑 + 主循环 `wait_for(queue.get())` 拉事件
+    - 所有 `yield ServerSentEvent(...).encode()` 返回 bytes（修前 yield 对象 → TypeError）
+  - backend/tests/backend/api/test_batch_sse.py (新文件): 6 个测试
+    - TestBatchSSEProgress: 3 个事件序列测试（mock BatchFileProcessor）
+    - TestBatchSSEASTGuard: 3 个 AST 守门（防"假流式占位注释"复发、强制 `progress_callback=`、强制 `.encode()`）
+  - backend/api/CLAUDE.md: 加 P0-4 修复说明
+- **测试:** 6/6 test_batch_sse.py 通过；67/67 全量 API 测试通过（0 回归）
+- **下一步:** P0-6
+
+### P0-5: 登出清 localStorage（GDPR）— **完成**
+- **Status:** complete
+- **Branch:** `fix/phase1-p0-5-logout-localstorage`
+- **Commit:** `35c4cac4` fix(frontend/store): 登出清 localStorage AI 对话历史
+- **改动:**
+  - frontend/store/authStore.ts: 加 clearPersistedAuthState() + logout/401 监听都调
+  - frontend/CLAUDE.md 认证章节加 P0-5 说明
+  - frontend/e2e/privacy.spec.ts (新文件): GDPR 合规 e2e 测试
+- **测试:** tsc 0 错误（仅 pre-existing sectionConfig 错，留给 P0-7）
+- **下一步:** P0-4
+
+### P0-3: 文件下载 404 修复 — **完成**
+- **Status:** complete
+- **Branch:** `fix/phase1-p0-3-download-404`
+- **Commit:** `fdefb99d` fix(backend/api): 文件下载 404
+- **改动:**
+  - backend/api/files_router.py:68 加 `_` 前缀
+  - backend/api/CLAUDE.md 加 P0-3 修复说明
+  - backend/tests/backend/api/test_files.py 新增 roundtrip 测试
+- **测试:** 5/5 test_files Upload passed, 61/61 全量 API passed
+- **下一步:** P0-5
+
+### P0-1: 替换 52 处 HTTPException → AppException — **完成**
+- **Status:** complete
+- **Started:** 2026-06-04
+- **Branch:** `fix/phase1-p0-1-app-exception`
+- **Actions taken:**
+  - 用户确认执行范围：完整 P0-1 → P0-10；P0-6 选 (B) MultiLevelTable；P0-9 改 /api/extract 接收 file_id
+  - 建任务清单（10 个 P0）
+  - 写 AST 扫描测试 `test_exceptions.py`（TDD red 阶段 8 FAILED + 5 FAILED for str leak）
+  - 改 8 个 router 文件 52 处 `raise HTTPException` → `raise AppException(ErrorCode.X, user_message, developer_message)`
+  - 修正 str() 检测逻辑：只检查 user_message/detail，developer_message 允许
+  - 加 2 个 integration 测试（test_unauth / test_404_session）
+  - 20/20 test_exceptions.py 通过；全量 58/58 API 测试通过
+- **Files created/modified:**
+  - `tantan/backend/api/auth.py` (8 HTTPException → AppException)
+  - `tantan/backend/api/chat_router.py` (6)
+  - `tantan/backend/api/extract_router.py` (5 + SSE error 事件)
+  - `tantan/backend/api/files_router.py` (15)
+  - `tantan/backend/api/form_router.py` (7)
+  - `tantan/backend/api/history_router.py` (2)
+  - `tantan/backend/api/sessions_router.py` (3)
+  - `tantan/backend/api/validation.py` (4)
+  - `tantan/backend/tests/backend/api/test_exceptions.py` (created, 20 tests)
+  - `tantan/backend/api/CLAUDE.md` (更新"4xx 错误码使用规范" + 写法示例)
+  - `tantan/backend/CLAUDE.md` (更新"错误处理统一" + P0-1 完成标记)
+- **Test Results:**
+  - test_exceptions.py: 20/20 passed
+  - 全量 API 测试: 58/58 passed (272s)
+  - 0 regression
+- **下一步**: P0-3（文件下载 404 修复）→ P0-5（登出清 localStorage）→ P0-4 → P0-6 → P0-7 → P0-8 → P0-9 → P0-10 → P0-2（最大工作量，放最后）
+
+---
+
 ## Session: 2026-06-03
 
 ### Phase 1: 重新 Code Review
