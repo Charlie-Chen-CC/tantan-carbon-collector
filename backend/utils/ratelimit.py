@@ -38,6 +38,10 @@ def _build_limiter() -> Optional[Any]:
         default_limits=[GLOBAL_DEFAULT],
         headers_enabled=True,
         strategy="fixed-window",
+        # 跳过 .env 读取：项目用 pydantic Settings 统一管环境变量
+        # slowapi 默认读 CWD 下 .env，starlette.config._read_file 用 open() 不指定 encoding
+        # 在 Windows 默认 GBK 上会 UnicodeDecodeError（即使 .env 是 UTF-8）
+        config_filename=None,
     )
 
 
