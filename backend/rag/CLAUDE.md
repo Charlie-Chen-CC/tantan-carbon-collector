@@ -10,6 +10,14 @@
 - `AliEmbeddingClient` - 文本嵌入（`dashscope.TextEmbedding.call`）
 - 工厂函数：`get_llm_client()` / `get_embedding_client()`
 
+**P0-2a 异步入口（2026-06 新增, 推荐新代码使用）**：
+- `AliLLMClient.achat(messages, **kwargs)` - 异步非流式 chat, `asyncio.to_thread` 包装
+- `AliLLMClient.achat_stream(messages, **kwargs)` - 异步流式 chat, 通过 `bridge_sync_iter` 桥接 sync generator
+- `AliEmbeddingClient.aencode(texts, model=None)` - 异步批量嵌入
+- `AliEmbeddingClient.aencode_single(text)` - 异步单文本嵌入
+- **新旧并存**: 旧 `chat` / `generate` / `encode` / `encode_single` sync 方法**保留** (向后兼容 P0-2c 之前的调用方)
+- **红线**: async def 内部必有 `await` (AST 守门测试 `test_all_async_methods_have_await` 强制)
+
 ### 向量数据库（直连）
 - `VectorDBClient` 抽象基类
 - `MilvusClient` / `QdrantClient` / `PGVectorClient` 三个实现

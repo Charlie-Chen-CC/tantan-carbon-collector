@@ -60,3 +60,6 @@ prometheus-client==0.21.0
 
 # 速率限制 (Phase 5.8，默认开启，需 RATELIMIT_ENABLED=false 关闭)
 slowapi==0.1.9
+
+# 异步测试（P0-2a 引入）
+pytest-asyncio>=0.23

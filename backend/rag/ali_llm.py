@@ -2,13 +2,16 @@
 阿里云 DashScope LLM/Embedding 客户端 - 碳管师收资系统
 Phase 2.6：直接用 dashscope SDK，不再走 LangChain 三层包装。
 
-原 LangChain 包装（langchain_llm.py）已删除，逻辑全部内联于此。
+P0-2a (2026-06): 新增 async 方法 (achat / achat_stream / aencode / aencode_single)
+解 FastAPI 路由同步阻塞 event loop 问题。
 """
+import asyncio
 import json
-from typing import Dict, Any, Optional, List, Iterator, Union
+from typing import Dict, Any, Optional, List, Iterator, Union, AsyncIterator
 
 from tantan.backend.config import get_config
 from tantan.backend.utils import get_logger
+from tantan.backend.utils.async_bridge import bridge_sync_iter
 
 logger = get_logger(__name__)
 
@@ -23,17 +26,18 @@ class AliLLMClient:
         self.temperature = config.LLM_TEMPERATURE
         self.max_tokens = config.LLM_MAX_TOKENS
 
-    def _call(
+    def _build_call_kwargs(
         self,
         messages: List[Dict[str, str]],
-        stream: bool = False,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-    ) -> Union[Dict[str, Any], Iterator[Dict[str, Any]]]:
-        """内部：调用 dashscope Generation.call"""
-        from dashscope import Generation
+        stream: bool,
+        temperature: Optional[float],
+        max_tokens: Optional[int],
+    ) -> Dict[str, Any]:
+        """内部: 构造 dashscope Generation.call 的 kwargs。
 
-        kwargs = {
+        P0-2a 重构: 从原 _call 抽出, async 方法 (achat/achat_stream) 复用。
+        """
+        kwargs: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "api_key": self.api_key,
@@ -49,6 +53,19 @@ class AliLLMClient:
             kwargs["max_tokens"] = max_tokens
         else:
             kwargs["max_tokens"] = self.max_tokens
+        return kwargs
+
+    def _call(
+        self,
+        messages: List[Dict[str, str]],
+        stream: bool = False,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Union[Dict[str, Any], Iterator[Dict[str, Any]]]:
+        """内部: 调用 dashscope Generation.call。"""
+        from dashscope import Generation
+
+        kwargs = self._build_call_kwargs(messages, stream, temperature, max_tokens)
 
         if stream:
             return self._stream_call(kwargs)
@@ -113,6 +130,30 @@ class AliLLMClient:
             normalized.append({"role": role, "content": content})
         return self._call(normalized, stream=stream, **kwargs)
 
+    async def achat(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """异步非流式 chat。内部 to_thread 调 self.chat (stream=False)。"""
+        return await asyncio.to_thread(self.chat, messages, stream=False, **kwargs)
+
+    async def achat_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """异步流式 chat。bridge sync _stream_call → async iterator。
+
+        用 utils.async_bridge.bridge_sync_iter 把 dashscope sync generator
+        桥到 async iterator, 让 FastAPI SSE 路由能真正异步消费。
+        """
+        def _make_iter():
+            return self.chat(messages, stream=True, **kwargs)
+
+        async for chunk in bridge_sync_iter(_make_iter):
+            yield chunk
+
     def count_tokens(self, text: str) -> int:
         """估算 token 数量"""
         return len(text) // 2 + len(text.split())
@@ -153,6 +194,40 @@ class AliEmbeddingClient:
     def encode_single(self, text: str) -> List[float]:
         """单个文本嵌入"""
         result = self.encode([text])
+        emb = result.get("embeddings", [])
+        return emb[0] if emb else []
+
+    async def aencode(self, texts: List[str], model: Optional[str] = None) -> Dict[str, Any]:
+        """异步批量文本嵌入。
+
+        Returns:
+            与 sync `encode` 同结构。失败时 `{"embeddings": [], "error": "..."}`。
+        """
+        def _sync():
+            from dashscope import TextEmbedding
+            try:
+                resp = TextEmbedding.call(
+                    model=model or self.model,
+                    input=texts,
+                    api_key=self.api_key,
+                )
+                if resp.status_code == 200:
+                    embeddings = [item["embedding"] for item in resp.output["embeddings"]]
+                    return {
+                        "embeddings": embeddings,
+                        "model": model or self.model,
+                        "dimension": len(embeddings[0]) if embeddings else 0,
+                    }
+                return {"embeddings": [], "error": f"status {resp.status_code}: {resp.message}"}
+            except Exception as e:
+                logger.error(f"dashscope TextEmbedding 失败: {e}", exc_info=True)
+                return {"embeddings": [], "error": str(e)}
+
+        return await asyncio.to_thread(_sync)
+
+    async def aencode_single(self, text: str) -> List[float]:
+        """异步单个文本嵌入。"""
+        result = await self.aencode([text])
         emb = result.get("embeddings", [])
         return emb[0] if emb else []
 

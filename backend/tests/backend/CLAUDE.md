@@ -95,7 +95,8 @@ python -m pytest tantan/backend/tests --cov=tantan.backend --cov-report=term-mis
 - Phase 5.7：141 tests（+11）
 - Phase 5.8：156 tests（+15）
 - Phase 6.1：171 tests（+15）
-- Phase 6.3：**184 tests**（+13）
+- Phase 6.3：184 tests（+13）
+- **P0-2a**：195 tests（+11: 4 bridge + 7 ali_llm async）
 
 ## 注意事项
 
