@@ -197,6 +197,40 @@ class AliEmbeddingClient:
         emb = result.get("embeddings", [])
         return emb[0] if emb else []
 
+    async def aencode(self, texts: List[str], model: Optional[str] = None) -> Dict[str, Any]:
+        """异步批量文本嵌入。
+
+        Returns:
+            与 sync `encode` 同结构。失败时 `{"embeddings": [], "error": "..."}`。
+        """
+        def _sync():
+            from dashscope import TextEmbedding
+            try:
+                resp = TextEmbedding.call(
+                    model=model or self.model,
+                    input=texts,
+                    api_key=self.api_key,
+                )
+                if resp.status_code == 200:
+                    embeddings = [item["embedding"] for item in resp.output["embeddings"]]
+                    return {
+                        "embeddings": embeddings,
+                        "model": model or self.model,
+                        "dimension": len(embeddings[0]) if embeddings else 0,
+                    }
+                return {"embeddings": [], "error": f"status {resp.status_code}: {resp.message}"}
+            except Exception as e:
+                logger.error(f"dashscope TextEmbedding 失败: {e}", exc_info=True)
+                return {"embeddings": [], "error": str(e)}
+
+        return await asyncio.to_thread(_sync)
+
+    async def aencode_single(self, text: str) -> List[float]:
+        """异步单个文本嵌入。"""
+        result = await self.aencode([text])
+        emb = result.get("embeddings", [])
+        return emb[0] if emb else []
+
 
 # 工厂函数
 def get_llm_client() -> AliLLMClient:
