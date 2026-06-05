@@ -21,7 +21,11 @@ tests/
 │   │   └── test_e2e_pipeline.py       # FileExtract → FormFill → DB 验证
 │   ├── rag/
 │   │   ├── test_retriever.py          # RAGSearcher 无静默 fallback
-│   │   └── test_retrieval_quality.py  # top1 命中 + 排序 + 边界
+│   │   ├── test_retrieval_quality.py  # top1 命中 + 排序 + 边界
+│   │   ├── test_vector_db_async.py    # P0-2b VectorDB 3 client async 方法
+│   │   ├── test_knowledge_base_async.py  # P0-2b 4 类 async 方法
+│   │   ├── test_retriever_async.py    # P0-2b RAGSearcher + RAGPipeline async
+│   │   └── test_ali_llm_async.py      # P0-2a AliLLMClient async 入口
 │   └── utils/
 └── CLAUDE.md
 ```
@@ -95,7 +99,9 @@ python -m pytest tantan/backend/tests --cov=tantan.backend --cov-report=term-mis
 - Phase 5.7：141 tests（+11）
 - Phase 5.8：156 tests（+15）
 - Phase 6.1：171 tests（+15）
-- Phase 6.3：**184 tests**（+13）
+- Phase 6.3：184 tests（+13）
+- **P0-2b**：206 tests（+22: 10 vector_db + 7 knowledge_base + 5 retriever）
+- **P0-2a (合 P0-2b 后)**：217 tests（+11: 4 bridge + 7 ali_llm async）
 
 ## 注意事项
 
