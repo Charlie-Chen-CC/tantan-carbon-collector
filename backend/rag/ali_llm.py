@@ -23,17 +23,18 @@ class AliLLMClient:
         self.temperature = config.LLM_TEMPERATURE
         self.max_tokens = config.LLM_MAX_TOKENS
 
-    def _call(
+    def _build_call_kwargs(
         self,
         messages: List[Dict[str, str]],
-        stream: bool = False,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-    ) -> Union[Dict[str, Any], Iterator[Dict[str, Any]]]:
-        """内部：调用 dashscope Generation.call"""
-        from dashscope import Generation
+        stream: bool,
+        temperature: Optional[float],
+        max_tokens: Optional[int],
+    ) -> Dict[str, Any]:
+        """内部: 构造 dashscope Generation.call 的 kwargs。
 
-        kwargs = {
+        P0-2a 重构: 从原 _call 抽出, async 方法 (achat/achat_stream) 复用。
+        """
+        kwargs: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "api_key": self.api_key,
@@ -49,6 +50,19 @@ class AliLLMClient:
             kwargs["max_tokens"] = max_tokens
         else:
             kwargs["max_tokens"] = self.max_tokens
+        return kwargs
+
+    def _call(
+        self,
+        messages: List[Dict[str, str]],
+        stream: bool = False,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ) -> Union[Dict[str, Any], Iterator[Dict[str, Any]]]:
+        """内部: 调用 dashscope Generation.call。"""
+        from dashscope import Generation
+
+        kwargs = self._build_call_kwargs(messages, stream, temperature, max_tokens)
 
         if stream:
             return self._stream_call(kwargs)
