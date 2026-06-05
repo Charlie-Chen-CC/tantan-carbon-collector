@@ -1,8 +1,12 @@
 """
 向量数据库客户端 - 碳管师收资系统
 支持Milvus/Qdrant/PGVector三种向量数据库
+
+P0-2b (2026-06): 3 个具体 client 加 async 方法 (asearch/ainsert/adelete)，
+全 asyncio.to_thread 包装同步方法 (用户决策, 匹配 P0-2a 模式)。
 """
 
+import asyncio
 import re
 from typing import List, Dict, Any, Optional, Tuple
 from abc import ABC, abstractmethod
@@ -229,6 +233,30 @@ class MilvusClient(VectorDBClient):
             logger.error(f"Milvus删除向量失败: collection={collection_name}, ids={ids}, error: {str(e)}", exc_info=True)
             return False
 
+    async def asearch(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        top_k: int = 5,
+        filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """异步搜索 (P0-2b)。内部 to_thread 调 self.search。"""
+        return await asyncio.to_thread(self.search, collection_name, query_vector, top_k, filter)
+
+    async def ainsert(
+        self,
+        collection_name: str,
+        vectors: List[List[float]],
+        documents: List[Dict[str, Any]],
+        ids: Optional[List[str]] = None,
+    ) -> List[str]:
+        """异步插入 (P0-2b)。内部 to_thread 调 self.insert。"""
+        return await asyncio.to_thread(self.insert, collection_name, vectors, documents, ids)
+
+    async def adelete(self, collection_name: str, ids: List[str]) -> bool:
+        """异步删除 (P0-2b)。内部 to_thread 调 self.delete。"""
+        return await asyncio.to_thread(self.delete, collection_name, ids)
+
 
 class QdrantClient(VectorDBClient):
     """Qdrant向量数据库客户端"""
@@ -369,6 +397,30 @@ class QdrantClient(VectorDBClient):
         except Exception as e:
             logger.error(f"Qdrant删除向量失败: collection={collection_name}, ids={ids}, error: {str(e)}", exc_info=True)
             return False
+
+    async def asearch(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        top_k: int = 5,
+        filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """异步搜索 (P0-2b)。内部 to_thread 调 self.search。"""
+        return await asyncio.to_thread(self.search, collection_name, query_vector, top_k, filter)
+
+    async def ainsert(
+        self,
+        collection_name: str,
+        vectors: List[List[float]],
+        documents: List[Dict[str, Any]],
+        ids: Optional[List[str]] = None,
+    ) -> List[str]:
+        """异步插入 (P0-2b)。内部 to_thread 调 self.insert。"""
+        return await asyncio.to_thread(self.insert, collection_name, vectors, documents, ids)
+
+    async def adelete(self, collection_name: str, ids: List[str]) -> bool:
+        """异步删除 (P0-2b)。内部 to_thread 调 self.delete。"""
+        return await asyncio.to_thread(self.delete, collection_name, ids)
 
 
 class PGVectorClient(VectorDBClient):
@@ -578,6 +630,30 @@ class PGVectorClient(VectorDBClient):
         except Exception as e:
             logger.error(f"PGVector删除向量失败: table={collection_name}, ids={ids}, error: {str(e)}", exc_info=True)
             return False
+
+    async def asearch(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        top_k: int = 5,
+        filter: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """异步搜索 (P0-2b)。内部 to_thread 调 self.search。"""
+        return await asyncio.to_thread(self.search, collection_name, query_vector, top_k, filter)
+
+    async def ainsert(
+        self,
+        collection_name: str,
+        vectors: List[List[float]],
+        documents: List[Dict[str, Any]],
+        ids: Optional[List[str]] = None,
+    ) -> List[str]:
+        """异步插入 (P0-2b)。内部 to_thread 调 self.insert。"""
+        return await asyncio.to_thread(self.insert, collection_name, vectors, documents, ids)
+
+    async def adelete(self, collection_name: str, ids: List[str]) -> bool:
+        """异步删除 (P0-2b)。内部 to_thread 调 self.delete。"""
+        return await asyncio.to_thread(self.delete, collection_name, ids)
 
 
 class VectorDBFactory:
