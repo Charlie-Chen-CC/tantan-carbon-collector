@@ -16,12 +16,19 @@ from tantan.backend.agents.file_processor import BatchFileProcessor
 from tantan.backend.api.auth import get_current_user
 from tantan.backend.models.database import User
 from tantan.backend.state.database_manager import DatabaseStateManager
-from tantan.backend.utils import log_exception
+from tantan.backend.utils import log_exception, get_trace_id
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/extract", tags=["extract"])
 state_manager = DatabaseStateManager()
+
+
+def _bad_request(detail: str) -> HTTPException:
+    """400 with trace_id 注入到 detail 末尾，便于客户端贴后端日志定位"""
+    trace_id = get_trace_id()
+    suffix = f" [trace_id={trace_id}]" if trace_id else ""
+    return HTTPException(status_code=400, detail=f"{detail}{suffix}")
 
 
 @router.post("/{session_id}/section/{section}")
@@ -34,7 +41,7 @@ async def extract_section(
     """提取文件中的部分数据"""
     try:
         if not 1 <= section <= 9:
-            raise HTTPException(status_code=400, detail="无效的部分编号（1-9）")
+            raise _bad_request("无效的部分编号（1-9）")
 
         session_data = state_manager.get_session(current_user.id, session_id)
         if not session_data:
@@ -42,11 +49,23 @@ async def extract_section(
 
         content = await file.read()
 
+        # 请求级日志：filename + content_size + 前 50 字节 hex（便于排查编码/损坏）
+        logger.info(
+            f"[extract] session_id={session_id} section={section} "
+            f"filename={file.filename!r} content_type={file.content_type!r} "
+            f"size={len(content)} head_hex={content[:50].hex()}"
+        )
+
         extractor = FileExtractAgent(section)
         result = extractor.process(content, filename=file.filename)
 
         if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
+            # 把 result 完整内容打到日志（status/error/data keys），便于排查
+            logger.warning(
+                f"[extract] FileExtractAgent 返回 error: "
+                f"filename={file.filename!r} result={result!r}"
+            )
+            raise _bad_request(result["error"])
 
         if result["status"] == "completed":
             filler = FormFillAgent(section)
@@ -62,7 +81,10 @@ async def extract_section(
                 "errors": fill_result.get("errors", [])
             }
 
-        raise HTTPException(status_code=400, detail="文件提取失败")
+        logger.warning(
+            f"[extract] 未知 result.status: filename={file.filename!r} result={result!r}"
+        )
+        raise _bad_request("文件提取失败")
     except HTTPException:
         raise
     except Exception as e:

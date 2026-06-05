@@ -39,9 +39,10 @@ def _build_limiter() -> Optional[Any]:
         headers_enabled=True,
         strategy="fixed-window",
         # 跳过 .env 读取：项目用 pydantic Settings 统一管环境变量
-        # slowapi 默认读 CWD 下 .env，starlette.config._read_file 用 open() 不指定 encoding
-        # 在 Windows 默认 GBK 上会 UnicodeDecodeError（即使 .env 是 UTF-8）
-        config_filename=None,
+        # 注意：传 None 等于没传——slowapi 内部 `config_filename is None` 判断会走
+        # 默认 ".env" 分支继续读文件。必须传一个 isfile()=False 的路径。
+        # os.devnull 跨平台（Windows=nul, Linux=/dev/null），isfile 永远 False。
+        config_filename=os.devnull,
     )
 
 

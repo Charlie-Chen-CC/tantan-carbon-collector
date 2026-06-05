@@ -143,12 +143,18 @@ class TextExtractor:
 
     @staticmethod
     def _extract_md(file_content: bytes) -> str:
-        """从 markdown 提取文本"""
-        try:
-            return file_content.decode("utf-8", errors="ignore")
-        except Exception as e:
-            logger.error(f"md 提取失败: {e}")
-            return ""
+        """从 markdown 提取文本
+
+        自动探测编码：优先尝试 UTF-8（带/不带 BOM），失败则尝试 GBK（Windows 常见），
+        再不行降级到 latin-1（永不抛异常）。避免硬编码 UTF-8 把中文 MD 解析成乱码。
+        """
+        for encoding in ("utf-8-sig", "utf-8", "gbk", "gb18030", "latin-1"):
+            try:
+                return file_content.decode(encoding)
+            except (UnicodeDecodeError, LookupError):
+                continue
+        # 兜底：用 errors="ignore" 不抛异常（跟原行为一致）
+        return file_content.decode("utf-8", errors="ignore")
 
     @staticmethod
     def _extract_image(file_content: bytes) -> str:
