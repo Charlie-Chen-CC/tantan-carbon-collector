@@ -7,13 +7,18 @@
  */
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import fs from 'fs';
 import { genTestUser, register, waitForDashboardReady } from './helpers';
 
 const FIXTURE = path.resolve(__dirname, 'fixtures/sample.xlsx');
 
 test.describe('Extract 基线', () => {
   test('AI 提取成功 → filled_data 非空 → 表单可见字段被填充', async ({ page }) => {
-    test.skip(!require('fs').existsSync(FIXTURE), `缺少测试文件: ${FIXTURE}`);
+    // P0-8 修复：原 test.skip 让 CI 永远报"通过"但 0 覆盖，
+    // 现在 fixture 已落档，缺失应直接 fail 而非静默 skip
+    if (!fs.existsSync(FIXTURE)) {
+      throw new Error(`缺少测试 fixture: ${FIXTURE}（P0-8 修复后必须存在）`);
+    }
 
     const user = genTestUser();
     await register(page, user);

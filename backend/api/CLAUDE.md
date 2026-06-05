@@ -37,6 +37,10 @@ FastAPI路由器，提供所有HTTP API端点。
 
 ### 文件提取
 - `POST /api/extract/{session_id}/section/{section}` - 提取文件中特定部分数据
+  - **P0-9 修复**：接受 `file_id` (form field) 而非要求前端重传 file
+  - 修前：前端 await upload(file) + await extract(file) → 同一文件 HTTP 传两次
+  - 修后：前端 await upload(file) 拿 file_id + await extract(file_id) → 1 次上传
+  - 兼容：若前端仍传 file (multipart)，仍按老路径处理
 
 ### AI对话
 - `POST /api/chat` - 发送消息（非流式）

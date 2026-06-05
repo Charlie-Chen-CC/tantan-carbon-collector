@@ -50,8 +50,15 @@ export const useFileUpload = (sessionId: string | null, section: number): UseFil
       uploadingRef.current = true;
       setIsUploading(true);
       try {
-        await fileApi.upload(sessionId, section, file);
-        const extractResp = await fileApi.extract(sessionId, section, file);
+        // P0-9 修复：先上传一次拿 file_id，extract 用 file_id 不再传 file
+        // 修前：await upload() + await extract(file) → 同一文件 HTTP 传两次
+        // 修后：await upload() 拿 file_id + await extract(fileId) → 1 次上传
+        const uploadResp = await fileApi.upload(sessionId, section, file);
+        const fileId = uploadResp.data?.file_id;
+        if (!fileId) {
+          throw new Error('upload 响应缺 file_id');
+        }
+        const extractResp = await fileApi.extract(sessionId, section, fileId);
         const data = extractResp.data;
         // 刷新文件列表（extract 不一定新增文件，但安全起见）
         await refresh();

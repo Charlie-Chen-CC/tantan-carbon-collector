@@ -5,6 +5,11 @@
  *   - 用 useEffect + 状态机（idle/loading/ready/error）确保 createSession 仅触发一次
  *   - 切 section 用稳定引用 updateSection(section) 触发后端同步
  *   - confirmSection 走乐观更新
+ *
+ * P0-10 修复：接受 enabled 参数，等 auth check 完成且 user 非空时再创建 session。
+ * 修前：useFormState 默认 enabled=true 总是立刻挂载，useEffect 立即 createSession()，
+ *       与 providers.tsx initAuthEffects 同帧 checkAuth() 赛跑，产生 401 噪声。
+ * 修后：dashboard 传 useFormState(!!user)，user 非空才创建。
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { message } from 'antd';
@@ -21,7 +26,7 @@ export interface UseFormStateReturn {
   reloadSession: () => Promise<void>;
 }
 
-export const useFormState = (autoCreate = true): UseFormStateReturn => {
+export const useFormState = (enabled = true): UseFormStateReturn => {
   const [session, setSession] = useState<SessionData | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('idle');
   // 防重入：Strict Mode 或多次 effect 触发时只创建一次
@@ -45,10 +50,13 @@ export const useFormState = (autoCreate = true): UseFormStateReturn => {
   }, []);
 
   useEffect(() => {
-    if (autoCreate) {
+    if (enabled) {
       createSession();
+    } else {
+      // 重置：enabled 由 true→false 时允许重新触发
+      createdRef.current = false;
     }
-  }, [autoCreate, createSession]);
+  }, [enabled, createSession]);
 
   const reloadSession = useCallback(async () => {
     if (!session?.session_id) return;

@@ -4,6 +4,21 @@
 
 ## 目录结构（Phase 3.2 创建）
 
+**useFileUpload** 关键设计：
+- `useRef uploadingRef` 防止重入
+- `uploadAndExtract(file)`：upload 拿 file_id + extract(fileId) → 1 次上传
+- **P0-9 修复**：不再把 file append 到 FormData 二次传给 extract 端点
+- 修前：`await upload(file) + await extract(file)` → 同一文件 HTTP 传两次
+- 修后：`await upload(file) → 拿 resp.file_id → await extract(fileId)` → 1 次上传
+
+**useFormState** 关键设计：
+- 接受 `enabled: boolean` 参数，默认 `true`
+- 仅 `enabled=true` 时触发 `createSession`
+- **P0-10 修复**：避免与 `providers.tsx initAuthEffects` 同帧 `checkAuth()` 赛跑
+- 修前：`useFormState(true)` 总是立即挂载，useEffect 立即 createSession
+- 修后：dashboard 传 `useFormState(!!user)`，user 非空才创建 session
+- `enabled` 由 `true→false` 时重置 `createdRef`，允许后续重新触发
+
 ```
 hooks/
 ├── useDragPosition.ts    # 通用拖动定位（悬浮球/悬浮窗共用）
