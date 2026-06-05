@@ -220,10 +220,12 @@ export const fileApi = {
   extract: (
     sessionId: string,
     section: number,
-    file: File
+    fileId: string
   ): Promise<AxiosResponse<any>> => {
+    // P0-9 修复：不再传 File 重新上传，而是把 upload 阶段拿到的 file_id
+    // 发给后端，后端按 file_id 在 uploads/ 找文件
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file_id', fileId);
     return apiClient.post(`/extract/${sessionId}/section/${section}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

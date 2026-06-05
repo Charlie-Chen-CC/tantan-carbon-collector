@@ -1,13 +1,14 @@
 """文件提取路由
 
-- POST /api/extract/{session_id}/section/{section}        提取单个文件
+- POST /api/extract/{session_id}/section/{section}        提取单个文件（接受 file_id 或 file）
 - POST /api/extract/{session_id}/section/{section}/batch  批量提取（SSE）
 """
 import json
 import logging
-from typing import List
+import os
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sse_starlette.sse import ServerSentEvent
 
@@ -24,14 +25,36 @@ router = APIRouter(prefix="/api/extract", tags=["extract"])
 state_manager = DatabaseStateManager()
 
 
+def _resolve_file_path(file_id: str) -> Optional[str]:
+    """根据 file_id 在 uploads/ 目录找文件
+
+    P0-9 修复：upload 阶段把文件以 {file_id}{ext} 存到 uploads/，
+    extract 阶段不再要求前端重传文件，直接按 file_id 找盘上文件。
+    """
+    upload_dir = "uploads"
+    if not os.path.isdir(upload_dir):
+        return None
+    for entry in os.listdir(upload_dir):
+        if entry.startswith(file_id + "."):
+            return os.path.join(upload_dir, entry)
+    return None
+
+
 @router.post("/{session_id}/section/{section}")
 async def extract_section(
     session_id: str,
     section: int,
-    file: UploadFile = File(...),
+    file_id: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user)
 ):
-    """提取文件中的部分数据"""
+    """提取文件中的部分数据
+
+    P0-9 修复：接受 `file_id` (form field) 而非要求前端重传 file。
+    修前：前端 await upload(file) 之后再 await extract(file) → 同一文件 HTTP 传两次
+    修后：前端 await upload(file) 拿 file_id，再 await extract(file_id) → 1 次上传
+    兼容：若前端仍传 file（老调用方），仍按 multipart 方式处理
+    """
     try:
         if not 1 <= section <= 9:
             raise HTTPException(status_code=400, detail="无效的部分编号（1-9）")
@@ -40,10 +63,23 @@ async def extract_section(
         if not session_data:
             raise HTTPException(status_code=404, detail="会话不存在")
 
-        content = await file.read()
+        # 优先用 file_id 路径（P0-9 主推）
+        if file_id:
+            file_path = _resolve_file_path(file_id)
+            if not file_path:
+                raise HTTPException(status_code=404, detail=f"file_id={file_id} 对应文件不存在")
+            with open(file_path, "rb") as f:
+                content = f.read()
+            filename = os.path.basename(file_path)
+        elif file is not None:
+            # 兼容老调用方
+            content = await file.read()
+            filename = file.filename or "uploaded"
+        else:
+            raise HTTPException(status_code=400, detail="必须提供 file_id 或 file")
 
         extractor = FileExtractAgent(section)
-        result = extractor.process(content, filename=file.filename)
+        result = extractor.process(content, filename=filename)
 
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])

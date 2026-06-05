@@ -37,9 +37,9 @@
   - ✓ **P0-4** batch SSE 假流式 + AST 违规
   - ✓ **P0-5** 登出清 localStorage（GDPR）
   - ✓ **P0-6** sectionConfig 'nested' 类型处理器
-  - ⏳ **P0-7** codegen 生成 broken TS 修复（5/5 守门测试通过，待 commit）
-  - ⬜ **P0-8** Playwright fixtures 缺失修复
-  - ⬜ **P0-9** useFileUpload 上传文件两次修复
+  - ✓ **P0-7** codegen 生成 broken TS 修复（5/5 守门测试通过）
+  - ✓ **P0-8** Playwright fixtures 缺失修复（3/3 守门 + sample.xlsx 落档）
+  - ⏳ **P0-9** useFileUpload 上传文件两次修复（4/4 e2e 守门 + 4/4 后端集成，待 commit）
   - ⬜ **P0-10** useFormState 挂起等 auth check
 
 ## Test Results

@@ -4,6 +4,13 @@
 
 ## 目录结构（Phase 3.2 创建）
 
+**useFileUpload** 关键设计：
+- `useRef uploadingRef` 防止重入
+- `uploadAndExtract(file)`：upload 拿 file_id + extract(fileId) → 1 次上传
+- **P0-9 修复**：不再把 file append 到 FormData 二次传给 extract 端点
+- 修前：`await upload(file) + await extract(file)` → 同一文件 HTTP 传两次
+- 修后：`await upload(file) → 拿 resp.file_id → await extract(fileId)` → 1 次上传
+
 ```
 hooks/
 ├── useDragPosition.ts    # 通用拖动定位（悬浮球/悬浮窗共用）

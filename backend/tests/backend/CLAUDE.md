@@ -97,6 +97,13 @@ python -m pytest tantan/backend/tests --cov=tantan.backend --cov-report=term-mis
   4. typescript AST 解析（用 `ts.createSourceFile` 跑 `parseDiagnostics`）
   5. `sectionConfig.ts` 写入存在性
 
+### Phase 6.5 补强 - P0-9 /api/extract 接受 file_id
+- **test_extract_by_id.py** (4 cases) - /api/extract 接受 file_id 路径：
+  1. file_id 路径返回 200/400/500（不是 422 — 422 说明 file 仍当必填）
+  2. 不存在的 file_id 返回 404
+  3. 空 body（既无 file_id 也无 file）返回 400
+  4. 兼容：老 multipart file 路径仍工作
+
 ### 总数
 - 之前：62 tests
 - Phase 4：109 tests（+47）
@@ -107,7 +114,8 @@ python -m pytest tantan/backend/tests --cov=tantan.backend --cov-report=term-mis
 - Phase 5.8：156 tests（+15）
 - Phase 6.1：171 tests（+15）
 - Phase 6.3：184 tests（+13）
-- Phase 6.4：**189 tests**（+5）
+- Phase 6.4：189 tests（+5）
+- Phase 6.5：**193 tests**（+4）
 
 ## 注意事项
 
