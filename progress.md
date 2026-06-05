@@ -1,5 +1,39 @@
 # Progress Log
 
+## Session: 2026-06-04（Phase 4: P0 修复）
+
+### P0-1: 替换 52 处 HTTPException → AppException — **完成**
+- **Status:** complete
+- **Started:** 2026-06-04
+- **Branch:** `fix/phase1-p0-1-app-exception`
+- **Actions taken:**
+  - 用户确认执行范围：完整 P0-1 → P0-10；P0-6 选 (B) MultiLevelTable；P0-9 改 /api/extract 接收 file_id
+  - 建任务清单（10 个 P0）
+  - 写 AST 扫描测试 `test_exceptions.py`（TDD red 阶段 8 FAILED + 5 FAILED for str leak）
+  - 改 8 个 router 文件 52 处 `raise HTTPException` → `raise AppException(ErrorCode.X, user_message, developer_message)`
+  - 修正 str() 检测逻辑：只检查 user_message/detail，developer_message 允许
+  - 加 2 个 integration 测试（test_unauth / test_404_session）
+  - 20/20 test_exceptions.py 通过；全量 58/58 API 测试通过
+- **Files created/modified:**
+  - `tantan/backend/api/auth.py` (8 HTTPException → AppException)
+  - `tantan/backend/api/chat_router.py` (6)
+  - `tantan/backend/api/extract_router.py` (5 + SSE error 事件)
+  - `tantan/backend/api/files_router.py` (15)
+  - `tantan/backend/api/form_router.py` (7)
+  - `tantan/backend/api/history_router.py` (2)
+  - `tantan/backend/api/sessions_router.py` (3)
+  - `tantan/backend/api/validation.py` (4)
+  - `tantan/backend/tests/backend/api/test_exceptions.py` (created, 20 tests)
+  - `tantan/backend/api/CLAUDE.md` (更新"4xx 错误码使用规范" + 写法示例)
+  - `tantan/backend/CLAUDE.md` (更新"错误处理统一" + P0-1 完成标记)
+- **Test Results:**
+  - test_exceptions.py: 20/20 passed
+  - 全量 API 测试: 58/58 passed (272s)
+  - 0 regression
+- **下一步**: P0-3（文件下载 404 修复）→ P0-5（登出清 localStorage）→ P0-4 → P0-6 → P0-7 → P0-8 → P0-9 → P0-10 → P0-2（最大工作量，放最后）
+
+---
+
 ## Session: 2026-06-03
 
 ### Phase 1: 重新 Code Review

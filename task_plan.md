@@ -1,87 +1,94 @@
-# Task Plan: 重新 Code Review（2026-06-03）
+# Task Plan: P0 修复（2026-06-04 起）
 
 <!--
-  重新审查 2026-06-01 报告后的实际项目状态。
-  2026-06-01 报告：docs/CODE_REVIEW_2026-06-01.md
-  旧规划：见 git 历史（备份分支 backup/pre-refactor-2026-06-01）
-  本次要做的：
-    1. 探查项目实际状态
-    2. 对照旧报告逐项验证修复情况
-    3. 找出新结构下的新问题
-    4. 落档 docs/CODE_REVIEW_2026-06-03.md
+  基于 docs/CODE_REVIEW_2026-06-03.md 报告的 TOP 10 P0 修复
+  用户原始指令：按 P0-1 → P0-10 顺序，每个 P0 一个 git 分支 + TDD + 验证 + commit
+  详细清单见用户提示词 + progress.md
 -->
 
 ## Goal
 
-在 2026-06-01 Code Review 之后，项目已按报告 Phase 1+2+部分 Phase 6 重构。重新审查：
-1. 验证旧报告 P0/P1 是否真修复
-2. 找出新结构下新引入的问题
-3. 找出旧报告里漏掉但仍然存在的问题
-4. 给出 2026-06-03 版报告
+按 2026-06-03 报告的 TOP 10 P0 修复，每个 P0 一个独立分支、TDD、验证、commit。
+不允许引入新 P0，遵循 feedback memory 强制规则（动代码必更新 CLAUDE.md，模块变更必更新 requirements.txt）。
 
 ## Current Phase
 
-Phase 1：项目结构探查 + 修复进度验证
+Phase 4：P0-1 完成 / 准备 P0-3
 
 ## Phases
 
-### Phase 1: 探查 + 验证修复进度
-- [ ] 列目录结构（backend/frontend 各自新布局）
-- [ ] 验证 3 个死代码文件已删（orchestrator/celery_app/manager）
-- [ ] 验证 routes.py 拆分（看是否真有 9 个 router 文件）
-- [ ] 验证 form_filler 拆分（看是否真有 5 个子模块）
-- [ ] 验证 RAG 去 LangChain 包装
-- [ ] 验证 python-magic 文件 MIME 验证
-- [ ] 验证 PBKDF2 100k 是否升级
-- [ ] 验证 Token 改 HttpOnly Cookie
-- [ ] 验证 dashboard 拆分 hooks/组件
-- [ ] 验证 RAG 包名错配（PGVector）
-- **Status:** in_progress
+### Phase 4: P0 修复（2026-06-04 起，预计 1 周）
 
-### Phase 2: 派 5 路并行 Agent 重新审查
-- [ ] Agent 1: 后端架构（针对拆分后的新结构）
-- [ ] Agent 2: 前端架构（针对重构后的 dashboard）
-- [ ] Agent 3: 安全（验证旧 P0 修复 + 找新漏洞）
-- [ ] Agent 4: 异步并发 + RAG（验证去 LC 后的新实现）
-- [ ] Agent 5: 工程规范（CLAUDE.md 执行率、新模块质量）
-- **Status:** pending
+- [x] **P0-1** AppException 替换 52 处 HTTPException（分支：fix/phase1-p0-1-app-exception）
+- [ ] **P0-2** LLM/RAG/向量库 异步化（最大工作量）
+- [ ] **P0-3** 文件下载 404 bug 修复
+- [ ] **P0-4** batch SSE 假流式 + AST 违规
+- [ ] **P0-5** 登出清 localStorage（GDPR）
+- [ ] **P0-6** sectionConfig 'nested' 类型处理器（选 B：新增 MultiLevelTable）
+- [ ] **P0-7** codegen 生成 broken TS 修复
+- [ ] **P0-8** Playwright fixtures 缺失修复
+- [ ] **P0-9** useFileUpload 上传文件两次修复（改 /api/extract 接收 file_id）
+- [ ] **P0-10** useFormState 挂起等 auth check
 
-### Phase 3: 汇总 + 落档
-- [ ] 去重合并
-- [ ] 输出 2026-06-03 版报告
-- [ ] 落档 docs/CODE_REVIEW_2026-06-03.md
-- [ ] 更新 task_plan.md / findings.md / progress.md
-- **Status:** pending
+**Status:** P0-1 done, 9 remaining
 
-## Key Questions
+### Phase 5: 错误处理 + 规范落地（1 周）
+- pre-commit hook（ruff + eslint + mypy + codegen --check + tsc --noEmit）
+- CI/CD（GH Actions：lint → test → build）
+- 删 14 个旧 e2e spec + 3 个 dev 垃圾 + section9 7 个重复 spec 保留 1 个
+- requirements.txt 全部 `==` 锁定
+- testcontainers 加 PG fixture
+- `modify_agent.VALID_FIELDS` 派生自 `section_defs.py`
+- `qa_agent.section_guides` 去重
+- useAIChat loadFromStorage 改 useEffect
+- useFormState console.error 改白名单 logger
+- setAuthToken / getAuthToken no-op 删
 
-1. 旧报告 P0 真修复了？还是只删了文件没改实质？
-2. 拆分后新模块间的耦合度如何？是否引入新循环依赖？
-3. 去 LangChain 后 RAG 管道是更简单还是更乱？
-4. python-magic 实际是否在用？是否回退到无验证？
-5. 前端 dashboard 拆 hooks 之后还是不是 God Component？
+### Phase 6: 性能与可观测（持续）
+- Token 内存 fallback 删
+- 大文件流式上传
+- PBKDF2 写回升级
+- N+1 修复
+- Telemetry / Metrics 全面启用
 
-## Decisions Made
+### Phase 7: LLM 安全与一致性（持续）
+- pydantic schema 校验 LLM 输出
+- 提示词注入黑名单
+- enum 白名单越界告警
+- multi-row 字段聚合逻辑
+- codegen sub_field 不再提升到 top-level
+- form_filler SSOT 与 modify_agent VALID_FIELDS 派生
+
+## Key Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| 不沿用 2026-06-01 报告 | 旧报告基于已不存在的旧结构，盲目套用会失真 |
-| 探查优先于派 Agent | 必须先知道"已修什么"，才能让 Agent 找"未修什么 + 新问题" |
-| 5 路并行 Agent 复用 | 与 06-01 同结构，但审查对象是新代码 |
-| 报告落档 docs/CODE_REVIEW_2026-06-03.md | 按时间序列保留历史，区分"两轮审查" |
-| 启动 planning-with-files 正确流程 | 06-01 漏了，06-03 不重蹈 |
+| 顺序：P0-1 → P0-3 → P0-5 → P0-4 → P0-6 → P0-7 → P0-8 → P0-9 → P0-10 → P0-2 | P0-2 工作量最大且会触多个模块，放最后专注；其余按 ROI 排 |
+| P0-6 选 (B) MultiLevelTable | 保留 section 9 分组语义，方案更完整 |
+| P0-9 改 /api/extract 接收 file_id | 消除重复上传，cleaner than 前端兼容 |
+| 完整 P0-1 → P0-10 一次走完 | 用户确认 4-5 天连续工作 |
+| TDD：AST 守门 + 集成测试 | 防止回归（重构引入 4 个新 Critical Bug） |
 
 ## Errors Encountered
 
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| 06-01 任务开始未调用 planning-with-files | 1 | 06-03 第一时间建 task_plan.md |
-| 06-01 报告未在产出时主动落档 | 1 | 06-03 在 Write 时直接落 docs/ |
-| 06-03 启动 `git add -A` 时被用户打断 | 1 | 用户告知"已经全部修改了"，改为先审查再说 |
+| `_project_root()` parents[3] 算错（实际需要 parents[4]） | 1 | 直接 print 调试后修正 |
+| `str()` AST 误报 developer_message=str(e) | 1 | 修正测试只扫 user_message/detail |
+| `app.router.remove_route` 不存在 | 1 | 改用 `routes = [r for r in routes if r.path != path]` |
 
 ## Notes
 
-- 备份分支已建：`backup/pre-refactor-2026-06-01`（工作区原始状态）
-- 当前 working tree 仍 modified，未 commit
-- 06-01 报告里的 3 个死代码文件已被删（orchestrator/celery_app/manager）
-- backend/CLAUDE.md 在 06-03 已被项目维护者更新（透露 Phase 2.4/2.5/2.6 已完成）
+- P0-1 commit 准备中（52 处替换 + 20 测试通过 + 58/58 全量 API 测试通过）
+- 项目根：inner `tantan/` 是 git 仓库，working tree 在 v1.0 分支基础上
+- 备份分支：`backup/pre-refactor-2026-06-01`（06-01 重构前），新增 `fix/phase1-p0-1-app-exception`（P0-1）
+
+---
+
+## 历史：2026-06-03 Code Review（已完成）
+
+<!--
+  重新审查 2026-06-01 报告后的实际项目状态。Phase 1-3 已完成。
+  详细见 findings.md + docs/CODE_REVIEW_2026-06-03.md。
+-->
+

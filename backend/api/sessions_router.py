@@ -8,13 +8,14 @@ import logging
 import uuid
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from tantan.backend.api.auth import get_current_user
 from tantan.backend.models.database import User
 from tantan.backend.state.database_manager import DatabaseStateManager
 from tantan.backend.utils import log_exception
+from tantan.backend.utils.exceptions import AppException, ErrorCode
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,12 @@ async def create_session(current_user: User = Depends(get_current_user)):
         )
     except Exception as e:
         log_exception(logger, e, {"user_id": current_user.user_id, "action": "create_session"})
-        raise HTTPException(status_code=500, detail=f"会话创建失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "会话创建失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )
 
 
 @router.get("/session/{session_id}")
@@ -59,14 +65,23 @@ async def get_session(session_id: str, current_user: User = Depends(get_current_
         session_data = state_manager.get_session(current_user.id, session_id)
 
         if not session_data:
-            raise HTTPException(status_code=404, detail="会话不存在")
+            raise AppException(
+                ErrorCode.SESSION_NOT_FOUND,
+                "会话不存在",
+                status_code=404,
+            )
 
         return session_data
-    except HTTPException:
+    except AppException:
         raise
     except Exception as e:
         log_exception(logger, e, {"session_id": session_id, "user_id": current_user.user_id, "action": "get_session"})
-        raise HTTPException(status_code=500, detail=f"获取会话失败: {str(e)}")
+        raise AppException(
+            ErrorCode.INTERNAL_ERROR,
+            "获取会话失败，请稍后重试",
+            status_code=500,
+            developer_message=str(e),
+        )
 
 
 @router.get("/sessions")
