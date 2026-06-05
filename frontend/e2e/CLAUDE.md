@@ -14,6 +14,8 @@ e2e/
 ├── extract.spec.ts                  # AI 提取 happy path（依赖 fixtures/sample.xlsx）
 ├── upload.spec.ts                   # 文件上传 + 提取 + 填充（依赖 fixtures/sample.xlsx）
 ├── __n0-8_fixtures-present.spec.ts  # P0-8 守门：fixtures 存在 + spec 文件不再 test.skip
+├── __n0-9_no-double-upload.spec.ts  # P0-9 守门：useFileUpload 不再双传 file
+├── __n0-10_formstate-wait-auth.spec.ts  # P0-10 守门：useFormState 等 auth check
 ├── fixtures/
 │   └── sample.xlsx                  # 5KB 真实 xlsx 来自 test_doc/extractable_by_section/section3
 └── CLAUDE.md
@@ -54,3 +56,16 @@ P0-8 修复后 `e2e/fixtures/sample.xlsx` 必须存在（5KB，section 3 燃料�
   - fixture 存在且非空
   - upload.spec.ts 不含 test.skip fixture 模式
   - extract.spec.ts 不含 test.skip fixture 模式
+
+### P0-9 守门 - useFileUpload 不再双传文件
+- 新建 `__n0-9_no-double-upload.spec.ts`（4 cases AST 分析）
+  - useFileUpload.ts 不再把 file 当参数传给 fileApi.extract
+  - useFileUpload.ts 上传后必须从 response 取 file_id 再调 extract
+  - services/api.ts 的 fileApi.extract 签名接受 fileId: string
+  - services/api.ts 的 fileApi.extract 内部用 FormData.append("file_id", fileId)
+
+### P0-10 守门 - useFormState 等 auth check
+- 新建 `__n0-10_formstate-wait-auth.spec.ts`（3 cases AST 分析）
+  - useFormState 签名接受 enabled 参数
+  - useFormState useEffect 仅在 enabled=true 时调 createSession
+  - dashboard/page.tsx 调 useFormState 时传动态条件（不是 hardcoded true）

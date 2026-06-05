@@ -41,7 +41,9 @@ export default function DashboardPage() {
   const [form] = Form.useForm();
   const watchedValues = Form.useWatch([], form);
 
-  const { session, switchSection, confirmSection } = useFormState(true);
+  // P0-10 修复：useFormState 接受 enabled，等 auth check 完成且 user 非空才创建
+  // session。修前 useFormState 默认 enabled 与 providers.tsx initAuthEffects 同帧赛跑。
+  const { session, switchSection, confirmSection } = useFormState(!!user);
 
   useEffect(() => {
     if (!isLoading && !user) {
