@@ -7,7 +7,9 @@ import uuid
 from typing import Tuple, Dict
 
 import magic
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
+
+from tantan.backend.utils.exceptions import AppException, ErrorCode
 
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -62,26 +64,37 @@ def validate_file(file: UploadFile) -> Tuple[str, str]:
     _, ext = os.path.splitext(file.filename or '')
     ext = ext.lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
+        raise AppException(
+            ErrorCode.UNSUPPORTED_FILE_TYPE,
+            f"不支持的文件类型: {ext}，仅支持 xlsx/xls/pdf/docx/doc/pptx/md/png/jpg/jpeg",
             status_code=400,
-            detail=f"不支持的文件类型: {ext}，仅支持 xlsx/xls/pdf/docx/doc/pptx/md/png/jpg/jpeg"
         )
 
     try:
         head = file.file.read(2048)
         file.file.seek(0)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"无法读取文件内容: {e}") from e
+        raise AppException(
+            ErrorCode.FILE_EMPTY,
+            "无法读取文件内容",
+            status_code=400,
+            developer_message=str(e),
+        ) from e
 
     if not head:
-        raise HTTPException(status_code=400, detail="空文件")
+        raise AppException(
+            ErrorCode.FILE_EMPTY,
+            "空文件",
+            status_code=400,
+        )
 
     detected_mime = magic.from_buffer(head, mime=True)
     allowed = EXT_TO_MIMES[ext]
     if detected_mime not in allowed:
-        raise HTTPException(
+        raise AppException(
+            ErrorCode.FILE_CONTENT_MISMATCH,
+            f"文件内容类型 {detected_mime} 与扩展名 {ext} 不匹配",
             status_code=400,
-            detail=f"文件内容类型 {detected_mime} 与扩展名 {ext} 不匹配"
         )
 
     safe_filename = f"{uuid.uuid4().hex}{ext}"

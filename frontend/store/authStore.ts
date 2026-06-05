@@ -18,6 +18,22 @@ interface AuthState {
   checkAuth: () => Promise<void>;
 }
 
+// P0-5 修复（2026-06-04）：登出 / 401 时清理 localStorage 里残留的 AI 对话历史。
+// 之前 logout() 只清服务端 cookie + zustand state，useAIChat.ts:62 的 useEffect
+// 会把 conversations 序列化为 'ai_conversations' 写入 localStorage 并留在那里，
+// 下一个用户登录后能看到上一用户的对话 → GDPR / 个人信息保护法违规。
+// 详见 docs/CODE_REVIEW_2026-06-03.md 4.3
+const AI_CONVERSATIONS_KEY = 'ai_conversations';
+
+function clearPersistedAuthState(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(AI_CONVERSATIONS_KEY);
+  } catch {
+    // localStorage 不可用（隐私模式 / quota）静默失败
+  }
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
@@ -53,6 +69,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await authApi.logout();
     } finally {
+      clearPersistedAuthState();
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
@@ -90,6 +107,7 @@ export const initAuthEffects = () => {
   if (typeof window === 'undefined') return;
   useAuthStore.getState().checkAuth();
   window.addEventListener('auth:logout', () => {
+    clearPersistedAuthState();
     useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
   });
 };
