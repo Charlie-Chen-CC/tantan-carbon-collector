@@ -129,6 +129,13 @@ npm run build  # 生产构建
 - 4 个组件拆分：`FormSidebar` / `FormSection` / `FloatingAI` / `FileUploadPanel`（重构为纯组件）
 - 删 `authStore.tsx`，删 `getAuthToken` / `setAuthToken` 旧接口
 
+### P0-6 修复（2026-06-04）：sectionConfig 'nested' 类型处理器
+- **Bug**：section 9 `freshWater` / `nitrogen` 字段定义 `type: 'nested'`，但 FormSection.tsx switch 缺 'nested' case → 字段永不渲染，数据采集静默失败
+- **修复**（用户选 B）：新增 `components/MultiLevelTable.tsx` + `config/sectionConfig.ts` 加 `NESTED_FIELD_SCHEMA` 常量 + FormSection switch 加 'nested' 分支
+- **关键设计**：`nested` ≠ `multi-row`。multi-row 是数组重复行（多行燃料记录），nested 是单条嵌套对象（freshWater 下挂 caliber/amount/unit 三个属性）
+- **form 命名约定**：扁平 key `${parentKey}${SubKey 首字母大写}`（如 `freshWaterCaliber`），与后端 `NESTED_FIELD_TRANSFORMERS` 输出对齐
+- **守门测试**：`e2e/__n0-6_nested-type.spec.ts`（14 个 AST 断言：NESTED_FIELD_SCHEMA 存在 / 'nested' case 存在 / MultiLevelTable export / freshWater+nitrogen schema 完整）
+
 ## 最近变更 (2026-05-26)
 
 ### UI 去AI化
